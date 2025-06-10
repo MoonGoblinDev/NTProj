@@ -24,7 +24,6 @@ struct ProjectSelectorView: View {
         Menu {
             // FIX: Explicitly type the Picker's selection
             Picker("Projects", selection: $selectedProjectID) {
-                Text("Select a Project").tag(nil as PersistentIdentifier?)
                 ForEach(projects) { project in
                     Text(project.name).tag(project.id as PersistentIdentifier?)
                 }
@@ -38,17 +37,13 @@ struct ProjectSelectorView: View {
         } label: {
             HStack {
                 Text(selectedProjectName)
-                    .font(.title2)
                     .fontWeight(.bold)
                     .lineLimit(1)
                 Spacer()
-                Image(systemName: "chevron.down.circle.fill")
-                    .imageScale(.large)
-                    .foregroundStyle(.secondary)
             }
             .foregroundColor(.primary)
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
+        //.menuStyle(.borderlessButton)
     }
 }

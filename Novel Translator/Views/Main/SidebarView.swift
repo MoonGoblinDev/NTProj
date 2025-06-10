@@ -2,11 +2,10 @@ import SwiftUI
 import SwiftData
 
 struct SidebarView: View {
-    var projects: [TranslationProject]
     @Binding var selectedProjectID: PersistentIdentifier?
     @Binding var selectedChapterID: PersistentIdentifier?
+    var projects: [TranslationProject] // Still needed to find the selected project
     
-    @State private var isCreatingProject = false
     @State private var selectedTab: SidebarTab = .chapters
     
     private var selectedProject: TranslationProject? {
@@ -15,20 +14,10 @@ struct SidebarView: View {
     }
     
     var body: some View {
-        // Main container for the entire sidebar
         VStack(spacing: 0) {
-            // --- TOP: PROJECT SELECTOR ---
-            ProjectSelectorView(
-                projects: projects,
-                selectedProjectID: $selectedProjectID,
-                onAddProject: { isCreatingProject = true }
-            )
-            .padding([.horizontal, .top])
-            .padding(.bottom, 8)
-
-            // Show content only if a project is selected
+            // The ProjectSelectorView has been REMOVED from here.
+            
             if let project = selectedProject {
-                // --- MIDDLE: CUSTOM TAB PICKER & CONTENT ---
                 VStack(spacing: 0) {
                     Picker("Sidebar Tab", selection: $selectedTab) {
                         ForEach(SidebarTab.allCases, id: \.self) { tab in
@@ -38,10 +27,9 @@ struct SidebarView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .padding(.horizontal)
-                    .padding(.bottom, 8)
+                    .padding(.vertical, 8)
                     
-                    // The switch statement displays the correct view
-                    // The views themselves will be modified to fill the space
+                    // The content for the selected tab
                     switch selectedTab {
                     case .chapters:
                         ChapterListView(project: project, selectedChapterID: $selectedChapterID)
@@ -54,23 +42,16 @@ struct SidebarView: View {
                     }
                 }
                 
-                // --- BOTTOM: UNIFIED ACTION BAR ---
+                // The unified action bar at the bottom.
                 SidebarActionsView(selectedTab: $selectedTab, project: project)
-
             } else {
-                // Placeholder when no project is selected, fills the whole space
                 Spacer()
                 ContentUnavailableView("No Project Selected", systemImage: "book.closed")
                 Spacer()
             }
         }
-        // --- FIX: CONSISTENT BACKGROUND ---
-        // Fills the entire sidebar with the standard window background color
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
-        .sheet(isPresented: $isCreatingProject) {
-            CreateProjectView()
-        }
         .onChange(of: selectedProjectID) {
             selectedTab = .chapters
         }
