@@ -4,7 +4,7 @@ import SwiftData
 struct SidebarView: View {
     @Binding var selectedProjectID: PersistentIdentifier?
     @Binding var selectedChapterID: PersistentIdentifier?
-    var projects: [TranslationProject] // Still needed to find the selected project
+    var projects: [TranslationProject]
     
     @State private var selectedTab: SidebarTab = .chapters
     
@@ -15,13 +15,11 @@ struct SidebarView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // The ProjectSelectorView has been REMOVED from here.
-            
             if let project = selectedProject {
                 VStack(spacing: 0) {
                     Picker("Sidebar Tab", selection: $selectedTab) {
                         ForEach(SidebarTab.allCases, id: \.self) { tab in
-                            Label(tab.rawValue, systemImage: tab.icon).tag(tab)
+                            Label(tab.rawValue, systemImage: tab.icon)
                         }
                     }
                     .pickerStyle(.segmented)

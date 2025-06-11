@@ -18,40 +18,45 @@ class ProjectViewModel {
     
     // createProject function remains the same...
     func createProject(name: String, sourceLang: String, targetLang: String, description: String?) {
-        // 1. Create the main project object
-        let newProject = TranslationProject(
-            name: name,
-            sourceLanguage: sourceLang,
-            targetLanguage: targetLang,
-            description: description
-        )
-        
-        // 2. Create default API configuration
-        let apiConfig = APIConfiguration(
-            provider: .openai,
-            apiKey: "", // User must fill this in later
-            model: APIConfiguration.APIProvider.openai.defaultModels.first ?? "gpt-4o-mini"
-        )
-        apiConfig.project = newProject
-        
-        // 3. Create initial statistics object
-        let stats = TranslationStats(projectId: newProject.id)
-        
-        // 4. Create default import settings
-        let importSettings = ImportSettings(projectId: newProject.id)
-        
-        // 5. Insert all new objects into the context
-        modelContext.insert(newProject)
-        modelContext.insert(apiConfig)
-        modelContext.insert(stats)
-        modelContext.insert(importSettings)
-        
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to save new project: \(error.localizedDescription)")
+            // 1. Create the main project object
+            let newProject = TranslationProject(
+                name: name,
+                sourceLanguage: sourceLang,
+                targetLanguage: targetLang,
+                description: description
+            )
+            
+            // 2. Create default API configuration
+            // MODIFIED: Updated to new initializer. The identifier will be set properly in the settings view.
+            let apiConfig = APIConfiguration(
+                provider: .google,
+                model: APIConfiguration.APIProvider.google.defaultModels.first ?? "gemini-1.5-flash-latest"
+            )
+            
+            // Generate a unique identifier for the keychain based on the new project's ID
+            apiConfig.apiKeyIdentifier = "com.noveltranslator.\(newProject.id.uuidString)"
+            
+            apiConfig.project = newProject
+            
+            // 3. Create initial statistics object
+            let stats = TranslationStats(projectId: newProject.id)
+            
+    // ... rest of the function is the same ...
+            // 4. Create default import settings
+            let importSettings = ImportSettings(projectId: newProject.id)
+            
+            // 5. Insert all new objects into the context
+            modelContext.insert(newProject)
+            modelContext.insert(apiConfig)
+            modelContext.insert(stats)
+            modelContext.insert(importSettings)
+            
+            do {
+                try modelContext.save()
+            } catch {
+                print("Failed to save new project: \(error.localizedDescription)")
+            }
         }
-    }
     
     func deleteProject(_ project: TranslationProject) {
         let projectId = project.id

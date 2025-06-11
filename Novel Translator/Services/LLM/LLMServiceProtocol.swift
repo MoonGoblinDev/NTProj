@@ -8,5 +8,18 @@
 import Foundation
 
 protocol LLMServiceProtocol {
+    // Keep the original for non-streaming models in the future.
     func translate(request: TranslationRequest) async throws -> TranslationResponse
+    
+    // The new streaming method.
+    func streamTranslate(request: TranslationRequest) -> AsyncThrowingStream<StreamingTranslationChunk, Error>
+}
+
+// Default implementation to make the new method optional for older services.
+extension LLMServiceProtocol {
+     func streamTranslate(request: TranslationRequest) -> AsyncThrowingStream<StreamingTranslationChunk, Error> {
+        return AsyncThrowingStream { continuation in
+            continuation.finish(throwing: LLMFactoryError.serviceNotImplemented("Streaming for this provider"))
+        }
+    }
 }

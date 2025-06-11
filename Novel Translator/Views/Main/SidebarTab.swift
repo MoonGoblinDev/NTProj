@@ -16,10 +16,10 @@ enum SidebarTab: String, CaseIterable {
     
     var icon: String {
         switch self {
-        case .chapters: "list.bullet"
-        case .glossary: "text.book.closed.fill"
+        case .chapters: "book.pages.fill"
+        case .glossary: "books.vertical.fill"
         case .settings: "gear"
-        case .stats: "chart.bar.xaxis"
+        case .stats: "chart.xyaxis.line"
         }
     }
 }

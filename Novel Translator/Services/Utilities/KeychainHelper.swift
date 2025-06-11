@@ -13,21 +13,28 @@ class KeychainHelper {
 
     static func save(key: String, data: Data) -> OSStatus {
         let query = [
-            kSecClass as String: kSecClassGenericPassword as String,
-            kSecAttrAccount as String: key,
-            kSecValueData as String: data
+            kSecClass: kSecClassGenericPassword as String,
+            kSecAttrAccount: key,
+            kSecValueData: data
         ] as [String: Any]
 
         SecItemDelete(query as CFDictionary)
         return SecItemAdd(query as CFDictionary, nil)
     }
+    
+    static func save(key: String, stringValue: String) -> OSStatus {
+        guard let data = stringValue.data(using: .utf8) else {
+            return errSecParam
+        }
+        return save(key: key, data: data)
+    }
 
     static func load(key: String) -> Data? {
         let query = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: key,
-            kSecReturnData as String: kCFBooleanTrue!,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrAccount: key,
+            kSecReturnData: kCFBooleanTrue!,
+            kSecMatchLimit: kSecMatchLimitOne
         ] as [String: Any]
 
         var dataTypeRef: AnyObject?
@@ -40,10 +47,15 @@ class KeychainHelper {
         }
     }
 
+    static func loadString(key: String) -> String? {
+        guard let data = load(key: key) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     static func delete(key: String) -> OSStatus {
         let query = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: key
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrAccount: key
         ] as [String: Any]
         
         return SecItemDelete(query as CFDictionary)

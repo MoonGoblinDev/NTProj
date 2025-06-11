@@ -12,7 +12,7 @@ import Foundation
 final class APIConfiguration {
     @Attribute(.unique) var id: UUID
     var provider: APIProvider
-    var apiKey: String // WARNING: Store securely, e.g., in Keychain
+    var apiKeyIdentifier: String
     var model: String
     var maxTokens: Int
     var temperature: Double
@@ -23,9 +23,10 @@ final class APIConfiguration {
     var project: TranslationProject?
     
     enum APIProvider: String, CaseIterable, Codable {
+        // For now, we only show Google as an option
+        case google = "google"
         case openai = "openai"
         case anthropic = "anthropic"
-        case google = "google"
         
         var displayName: String {
             switch self {
@@ -39,17 +40,18 @@ final class APIConfiguration {
             switch self {
             case .openai: return ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
             case .anthropic: return ["claude-3-5-sonnet-20240620", "claude-3-haiku-20240307"]
-            case .google: return ["gemini-1.5-pro-latest", "gemini-1.5-flash-latest"]
+            case .google: return [] // This will now be fetched dynamically
             }
         }
     }
     
-    init(provider: APIProvider, apiKey: String, model: String) {
+    init(provider: APIProvider, model: String) {
         self.id = UUID()
         self.provider = provider
-        self.apiKey = apiKey
+        // The identifier will be based on the project's ID for uniqueness.
+        self.apiKeyIdentifier = ""
         self.model = model
-        self.maxTokens = 4096
+        self.maxTokens = 8192 // Gemini has a larger context window
         self.temperature = 0.3
         self.isDefault = false
         self.createdDate = Date()

@@ -10,6 +10,7 @@ import SwiftData
 
 struct ProjectSettingsView: View {
     @Bindable var project: TranslationProject
+    @State private var isAPISettingsPresented = false
 
     var body: some View {
         Form {
@@ -31,10 +32,14 @@ struct ProjectSettingsView: View {
             }
             
             Section("API Configuration") {
-                NavigationLink("Manage API Keys & Models", destination: APISettingsView(project: project))
+                // MODIFIED: Use a button to present a sheet
+                Button("Manage API Keys & Models") {
+                    isAPISettingsPresented = true
+                }
             }
             
             Section("Import Settings") {
+                // This can remain a NavigationLink for now
                 NavigationLink("Configure Import Rules", destination: ImportSettingsView(project: project))
             }
         }
@@ -42,15 +47,13 @@ struct ProjectSettingsView: View {
         .scrollContentBackground(.hidden)
         .padding()
         .navigationTitle("Project Settings")
+        .sheet(isPresented: $isAPISettingsPresented) {
+            APISettingsView(project: project)
+        }
     }
 }
 
-// Create placeholder views for the navigation destinations
-struct APISettingsView: View {
-    @Bindable var project: TranslationProject
-    var body: some View { Text("API Settings for \(project.name)") }
-}
-
+// Keep the placeholder view for ImportSettingsView
 struct ImportSettingsView: View {
     @Bindable var project: TranslationProject
     var body: some View { Text("Import Settings for \(project.name)") }

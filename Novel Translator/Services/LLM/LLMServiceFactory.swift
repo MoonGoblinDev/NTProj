@@ -7,18 +7,34 @@
 
 import Foundation
 
+enum LLMFactoryError: LocalizedError {
+    case apiKeyNotFound(String)
+    case serviceNotImplemented(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .apiKeyNotFound(let provider):
+            return "API Key for \(provider) not found in Keychain. Please set it in Project Settings."
+        case .serviceNotImplemented(let provider):
+            return "The translation service for \(provider) is not yet implemented."
+        }
+    }
+}
+
 class LLMServiceFactory {
-    static func create(provider: APIConfiguration.APIProvider, config: APIConfiguration) -> LLMServiceProtocol {
-        // In a real app, you would also pass the API key securely from Keychain.
-        let apiKey = config.apiKey
+    static func create(provider: APIConfiguration.APIProvider, config: APIConfiguration) throws -> LLMServiceProtocol {
+        
+        guard let apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier) else {
+            throw LLMFactoryError.apiKeyNotFound(provider.displayName)
+        }
 
         switch provider {
-        case .openai:
-            return OpenAIService(apiKey: apiKey)
-        case .anthropic:
-            return AnthropicService(apiKey: apiKey)
         case .google:
             return GoogleService(apiKey: apiKey)
+        case .openai:
+            throw LLMFactoryError.serviceNotImplemented("OpenAI")
+        case .anthropic:
+            throw LLMFactoryError.serviceNotImplemented("Anthropic")
         }
     }
 }
