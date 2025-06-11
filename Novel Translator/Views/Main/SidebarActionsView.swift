@@ -32,23 +32,19 @@ struct SidebarActionsView: View {
                 } label: {
                     Label("Add Entry", systemImage: "plus")
                 }
-            case .settings:
-                // No action button for settings tab
-                EmptyView()
-            case .stats:
-                // No action button for stats tab
+            case .settings, .stats:
+                // No action button for these tabs
                 EmptyView()
             }
         }
         .padding(12)
-        // A subtle background to distinguish it from the content above
         .background(.background.secondary)
         .sheet(isPresented: $isImporterPresented) {
             ImportChapterView(project: project)
         }
         .sheet(isPresented: $isAddGlossaryPresented) {
-            // Placeholder for the Create Glossary Entry view
-            Text("Create Glossary Entry View")
+            // Present the detail view for CREATING a new entry (entry is nil)
+            GlossaryDetailView(entry: nil, project: project)
         }
     }
 }

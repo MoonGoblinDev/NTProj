@@ -10,9 +10,22 @@
 		908891592DF842CE000B99B4 /* Novel Translator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Novel Translator.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		90D4C4B12DF9CA8400B40A0C /* Exceptions for "Novel Translator" folder in "Novel Translator" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Novel-Translator-Info.plist",
+			);
+			target = 908891582DF842CE000B99B4 /* Novel Translator */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9088915B2DF842CE000B99B4 /* Novel Translator */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				90D4C4B12DF9CA8400B40A0C /* Exceptions for "Novel Translator" folder in "Novel Translator" target */,
+			);
 			path = "Novel Translator";
 			sourceTree = "<group>";
 		};
@@ -258,7 +271,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_FILE = "Novel-Translator-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -285,7 +298,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_FILE = "Novel-Translator-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

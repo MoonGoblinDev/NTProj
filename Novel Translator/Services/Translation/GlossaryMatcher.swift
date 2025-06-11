@@ -1,10 +1,3 @@
-//
-//  GlossaryMatcher.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 10/06/25.
-//
-
 import Foundation
 
 class GlossaryMatcher {
@@ -16,16 +9,20 @@ class GlossaryMatcher {
         // something like Levenshtein distance for fuzzy matching.
         
         for entry in glossary where entry.isActive {
-            let termsToSearch = [entry.originalTerm] + entry.aliases
+            // Include the original term and all its aliases in the search.
+            let termsToSearch = [entry.originalTerm] + entry.aliases.filter { !$0.isEmpty }
             
             for term in termsToSearch {
+                guard !term.isEmpty else { continue }
                 var searchStartIndex = text.startIndex
+                
+                // Find all occurrences of the term in the text.
                 while searchStartIndex < text.endIndex,
                       let range = text.range(of: term, options: .caseInsensitive, range: searchStartIndex..<text.endIndex) {
                     let match = GlossaryMatch(
                         entry: entry,
                         range: range,
-                        matchedAlias: term == entry.originalTerm ? nil : term
+                        matchedAlias: term.lowercased() == entry.originalTerm.lowercased() ? nil : term
                     )
                     matches.append(match)
                     searchStartIndex = range.upperBound
@@ -33,12 +30,8 @@ class GlossaryMatcher {
             }
         }
         
-        // TODO: Add fuzzy matching, context awareness, and frequency tracking
-        
-        // For now, return unique entries to avoid multiple matches of the same entry
-        let uniqueEntries = Dictionary(grouping: matches, by: { $0.entry.id })
-        let firstMatchPerEntry = uniqueEntries.compactMap { $0.value.first }
-        
-        return firstMatchPerEntry
+        // Return all found matches, sorted by their position in the text.
+        // This is crucial for the highlighting view to render them correctly.
+        return matches.sorted { $0.range.lowerBound < $1.range.lowerBound }
     }
 }

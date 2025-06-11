@@ -2,15 +2,17 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    // Access the shared state object from the environment.
+    @EnvironmentObject private var appContext: AppContext
+    
     @State private var selectedProjectID: PersistentIdentifier?
     @State private var selectedChapterID: PersistentIdentifier?
 
     @Query(sort: \TranslationProject.lastModifiedDate, order: .reverse) private var projects: [TranslationProject]
     
-
     var body: some View {
         NavigationSplitView {
-            // --- The Sidebar ---
+            // ... (SidebarView is unchanged)
             SidebarView(
                 selectedProjectID: $selectedProjectID,
                 selectedChapterID: $selectedChapterID,
@@ -19,9 +21,7 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 600)
 
         } detail: {
-            // --- The Main Content View ---
-            // The workspace now takes bindings to the selected IDs.
-            // It will fetch the chapter object itself using a query.
+            // ... (TranslationWorkspaceView is unchanged here)
             TranslationWorkspaceView(
                 selectedChapterID: $selectedChapterID,
                 projects: projects,
@@ -29,14 +29,23 @@ struct ContentView: View {
             )
         }
         .onAppear {
-            // On first launch, select the most recent project
             if selectedProjectID == nil {
                 selectedProjectID = projects.first?.id
             }
         }
         .onChange(of: selectedProjectID) {
-            // When the project changes, clear the chapter selection
             selectedChapterID = nil
+        }
+        // The .onOpenURL now has a much simpler job.
+        .onOpenURL { url in
+            guard url.scheme == "noveltranslator", url.host == "glossary" else {
+                return
+            }
+            
+            // Just update the shared state. No notifications needed.
+            if let uuid = UUID(uuidString: url.lastPathComponent) {
+                appContext.glossaryEntryToEditID = uuid
+            }
         }
     }
 }
