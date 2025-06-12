@@ -5,8 +5,9 @@ struct GlossaryView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var project: TranslationProject
 
+    // This state variable will hold the entry we want to edit.
+    // When it's not nil, the sheet will be presented.
     @State private var entryToEdit: GlossaryEntry?
-    @State private var isSheetPresented = false
     
     private var sortedEntries: [GlossaryEntry] {
         project.glossaryEntries.sorted { $0.originalTerm.lowercased() < $1.originalTerm.lowercased() }
@@ -26,45 +27,51 @@ struct GlossaryView: View {
             } else {
                 List {
                     ForEach(sortedEntries) { entry in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(entry.originalTerm)
-                                    .fontWeight(.bold)
-                                Text(entry.translation)
-                                    .foregroundStyle(.secondary)
+                        // THE CHANGE: Wrap the row content in a Button.
+                        Button(action: {
+                            // When clicked, set the entryToEdit state.
+                            self.entryToEdit = entry
+                        }) {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(entry.originalTerm)
+                                        .fontWeight(.bold)
+                                    Text(entry.translation)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text(entry.category.displayName)
+                                    .font(.caption)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.secondary.opacity(0.2), in: Capsule())
                             }
-                            Spacer()
-                            Text(entry.category.displayName)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.secondary.opacity(0.2), in: Capsule())
+                            // Make the button content use the primary text color.
+                            .foregroundStyle(.primary)
                         }
-                        .contentShape(Rectangle())
-                        .contextMenu {
-                            Button("Edit") {
-                                entryToEdit = entry
-                                isSheetPresented = true
-                            }
-                            Button("Delete", role: .destructive) {
-                                delete(entry: entry)
-                            }
-                        }
+                        // Use .plain button style to make it look like a normal list row.
+                        .buttonStyle(.plain)
                     }
+                    // We can add swipe-to-delete as a fast deletion method.
+                    .onDelete(perform: delete)
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
         }
-        .sheet(isPresented: $isSheetPresented, onDismiss: { entryToEdit = nil }) {
-            // This sheet is for editing an existing entry
-            if let entryToEdit {
-                GlossaryDetailView(entry: entryToEdit, project: project)
-            }
+        // This .sheet modifier is now triggered when entryToEdit is not nil.
+        .sheet(item: $entryToEdit) { entry in
+            // When the sheet is presented, pass the selected entry to the detail view.
+            GlossaryDetailView(entry: entry, project: project)
         }
     }
 
-    private func delete(entry: GlossaryEntry) {
-        modelContext.delete(entry)
+    /// This function handles deletion, either from the onDelete modifier or a future delete button.
+    private func delete(at offsets: IndexSet) {
+        for index in offsets {
+            let entryToDelete = sortedEntries[index]
+            modelContext.delete(entryToDelete)
+        }
         do {
             try modelContext.save()
         } catch {

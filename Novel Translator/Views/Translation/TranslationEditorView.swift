@@ -7,33 +7,75 @@ struct TranslationEditorView: View {
     let matches: [GlossaryMatch]
     let isDisabled: Bool
     
-    // A computed property to generate the Markdown string on-the-fly.
-    private var sourceAsMarkdown: String {
-        var markdownString = ""
-        var currentIndex = chapter.rawContent.startIndex
-
-        // Matches must be sorted by their start index.
+    // This computed property is now much more robust.
+    private var textLines: [[TextComponent]] {
+        // Create a flat map of all characters in the text, associating them
+        // with any glossary entry they belong to.
+        var characterMap: [(char: Character, entry: GlossaryEntry?)] = chapter.rawContent.map { ($0, nil) }
+        
         for match in matches {
-            // Append non-matching text
-            if match.range.lowerBound > currentIndex {
-                markdownString += chapter.rawContent[currentIndex..<match.range.lowerBound]
+            // The range from the matcher is for the entire string, which is what we want.
+            let rangeStartIndex = chapter.rawContent.distance(from: chapter.rawContent.startIndex, to: match.range.lowerBound)
+            let rangeEndIndex = chapter.rawContent.distance(from: chapter.rawContent.startIndex, to: match.range.upperBound)
+            
+            for i in rangeStartIndex..<rangeEndIndex {
+                characterMap[i].entry = match.entry
+            }
+        }
+        
+        // Now, build the lines of components from this character map.
+        var lines: [[TextComponent]] = []
+        var currentLine: [TextComponent] = []
+        
+        var currentText = ""
+        var currentEntry: GlossaryEntry? = nil
+        
+        for (char, entry) in characterMap {
+            if char.isNewline {
+                // End the current component if there is one
+                if !currentText.isEmpty {
+                    if let entry = currentEntry {
+                        currentLine.append(.glossary(text: currentText, entry: entry))
+                    } else {
+                        currentLine.append(.plain(currentText))
+                    }
+                }
+                // Finalize the current line and start a new one
+                lines.append(currentLine)
+                currentLine = []
+                currentText = ""
+                currentEntry = nil
+                continue
             }
             
-            // Append the glossary term as a Markdown link with our custom URL scheme.
-            let matchedText = chapter.rawContent[match.range]
-            let entryID = match.entry.id.uuidString
-            // This creates the link, e.g., "[World](noveltranslator://glossary/SOME-UUID)"
-            markdownString += "[\(matchedText)](noveltranslator://glossary/\(entryID))"
+            // If the entry type changes (or starts/ends), finalize the previous component
+            if entry?.id != currentEntry?.id {
+                if !currentText.isEmpty {
+                    if let entry = currentEntry {
+                        currentLine.append(.glossary(text: currentText, entry: entry))
+                    } else {
+                        currentLine.append(.plain(currentText))
+                    }
+                }
+                currentText = ""
+                currentEntry = entry
+            }
             
-            currentIndex = match.range.upperBound
+            // Append the character to the current component's text
+            currentText.append(char)
         }
         
-        // Append any remaining text
-        if currentIndex < chapter.rawContent.endIndex {
-            markdownString += chapter.rawContent[currentIndex..<chapter.rawContent.endIndex]
+        // Add the very last component and line
+        if !currentText.isEmpty {
+            if let entry = currentEntry {
+                currentLine.append(.glossary(text: currentText, entry: entry))
+            } else {
+                currentLine.append(.plain(currentText))
+            }
         }
+        lines.append(currentLine)
         
-        return markdownString
+        return lines
     }
 
     var body: some View {
@@ -45,8 +87,8 @@ struct TranslationEditorView: View {
                     .padding(.horizontal)
                     .padding(.top, 10)
                 
-                // Pass the generated Markdown to our view.
-                HighlightedTextView(markdownContent: sourceAsMarkdown)
+                // Pass the generated lines to our new HighlightedTextView
+                HighlightedTextView(lines: textLines)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             
