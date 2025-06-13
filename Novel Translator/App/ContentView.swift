@@ -12,7 +12,6 @@ struct ContentView: View {
     
     var body: some View {
         NavigationSplitView {
-            // ... (SidebarView is unchanged)
             SidebarView(
                 selectedProjectID: $selectedProjectID,
                 selectedChapterID: $selectedChapterID,
@@ -21,7 +20,6 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 600)
 
         } detail: {
-            // ... (TranslationWorkspaceView is unchanged here)
             TranslationWorkspaceView(
                 selectedChapterID: $selectedChapterID,
                 projects: projects,

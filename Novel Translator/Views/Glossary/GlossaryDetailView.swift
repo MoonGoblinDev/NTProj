@@ -8,14 +8,12 @@
 import SwiftUI
 import SwiftData
 
-// Create a typealias for brevity
 typealias GlossaryCategory = GlossaryEntry.GlossaryCategory
 
 struct GlossaryDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
-    // The entry to edit, or nil if creating a new one.
     var entry: GlossaryEntry?
     var project: TranslationProject
     
@@ -109,14 +107,12 @@ struct GlossaryDetailView: View {
         let finalAliases = getFinalAliases()
         
         if let entry = entry {
-            // Editing existing entry
             entry.originalTerm = originalTerm
             entry.translation = translation
             entry.category = category
             entry.contextDescription = contextDescription.isEmpty ? nil : contextDescription
             entry.aliases = finalAliases
         } else {
-            // Creating new entry
             let newEntry = GlossaryEntry(
                 originalTerm: originalTerm,
                 translation: translation,
@@ -147,4 +143,43 @@ struct GlossaryDetailView: View {
             print("Failed to delete glossary entry: \(error)")
         }
     }
+}
+
+#Preview("New Entry") {
+    struct Previewer: View {
+        @Query private var projects: [TranslationProject]
+        var body: some View {
+            NavigationStack {
+                GlossaryDetailView(entry: nil, project: projects.first!)
+            }
+        }
+    }
+    
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
+    container.mainContext.insert(TranslationProject(name: "Sample", sourceLanguage: "A", targetLanguage: "B"))
+    
+    return Previewer()
+        .modelContainer(container)
+}
+
+#Preview("Edit Entry") {
+    struct Previewer: View {
+        @Query private var projects: [TranslationProject]
+        var body: some View {
+            NavigationStack {
+                GlossaryDetailView(entry: projects.first!.glossaryEntries.first!, project: projects.first!)
+            }
+        }
+    }
+    
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
+    let project = TranslationProject(name: "Sample", sourceLanguage: "A", targetLanguage: "B")
+    let entry = GlossaryEntry(originalTerm: "主人公", translation: "Protagonist", category: .character, aliases: ["main character"])
+    project.glossaryEntries.append(entry)
+    container.mainContext.insert(project)
+    
+    return Previewer()
+        .modelContainer(container)
 }

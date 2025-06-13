@@ -5,8 +5,6 @@ struct GlossaryView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var project: TranslationProject
 
-    // This state variable will hold the entry we want to edit.
-    // When it's not nil, the sheet will be presented.
     @State private var entryToEdit: GlossaryEntry?
     
     private var sortedEntries: [GlossaryEntry] {
@@ -27,9 +25,7 @@ struct GlossaryView: View {
             } else {
                 List {
                     ForEach(sortedEntries) { entry in
-                        // THE CHANGE: Wrap the row content in a Button.
                         Button(action: {
-                            // When clicked, set the entryToEdit state.
                             self.entryToEdit = entry
                         }) {
                             HStack {
@@ -46,27 +42,21 @@ struct GlossaryView: View {
                                     .padding(.vertical, 4)
                                     .background(Color.secondary.opacity(0.2), in: Capsule())
                             }
-                            // Make the button content use the primary text color.
                             .foregroundStyle(.primary)
                         }
-                        // Use .plain button style to make it look like a normal list row.
                         .buttonStyle(.plain)
                     }
-                    // We can add swipe-to-delete as a fast deletion method.
                     .onDelete(perform: delete)
                 }
                 .listStyle(.inset)
                 .scrollContentBackground(.hidden)
             }
         }
-        // This .sheet modifier is now triggered when entryToEdit is not nil.
         .sheet(item: $entryToEdit) { entry in
-            // When the sheet is presented, pass the selected entry to the detail view.
             GlossaryDetailView(entry: entry, project: project)
         }
     }
 
-    /// This function handles deletion, either from the onDelete modifier or a future delete button.
     private func delete(at offsets: IndexSet) {
         for index in offsets {
             let entryToDelete = sortedEntries[index]
@@ -78,4 +68,28 @@ struct GlossaryView: View {
             print("Failed to delete glossary entry: \(error)")
         }
     }
+}
+
+#Preview {
+    struct Previewer: View {
+        @Query private var projects: [TranslationProject]
+        var body: some View {
+            GlossaryView(project: projects.first!)
+        }
+    }
+
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
+    
+    let project = TranslationProject(name: "Sample", sourceLanguage: "A", targetLanguage: "B")
+    project.glossaryEntries = [
+        GlossaryEntry(originalTerm: "Character A", translation: "Protagonist", category: .character),
+        GlossaryEntry(originalTerm: "Magic Sword", translation: "Excalibur", category: .object),
+        GlossaryEntry(originalTerm: "The Capital", translation: "King's Landing", category: .place),
+    ]
+    container.mainContext.insert(project)
+
+    return Previewer()
+        .modelContainer(container)
+        .frame(width: 350, height: 500)
 }

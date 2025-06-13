@@ -7,17 +7,14 @@ struct APISettingsView: View {
     
     @Bindable var project: TranslationProject
     
-    // State for the form
     @State private var apiKey: String = ""
     @State private var selectedProvider: APIConfiguration.APIProvider
     @State private var selectedModel: String
     
-    // State for dynamic model loading
     @State private var availableModels: [String] = []
     @State private var isLoadingModels = false
     @State private var modelLoadingError: String?
     
-    // To only show Gemini for now
     private let availableProviders: [APIConfiguration.APIProvider] = [.google]
     
     init(project: TranslationProject) {
@@ -93,12 +90,20 @@ struct APISettingsView: View {
     }
     
     private func loadInitialData() {
-        // Load existing key from keychain when view appears
         if let config = project.apiConfig {
             self.apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier) ?? ""
         }
-        // Trigger model loading
-        Task { await loadModels() }
+        Task {
+            // For preview, we won't call the network. Just populate with dummy data.
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+                self.availableModels = ["gemini-1.5-pro-preview", "gemini-1.5-flash-preview"]
+                self.selectedModel = "gemini-1.5-flash-preview"
+                return
+            }
+            #endif
+            await loadModels()
+        }
     }
     
     private func loadModels() async {
@@ -114,8 +119,6 @@ struct APISettingsView: View {
         do {
             let models = try await GoogleService.fetchAvailableModels(apiKey: self.apiKey)
             self.availableModels = models
-            
-            // If current model is not in the new list, or no model is selected, pick the first one
             if !models.contains(selectedModel) || selectedModel.isEmpty {
                 selectedModel = models.first ?? ""
             }
@@ -146,4 +149,26 @@ struct APISettingsView: View {
             print("Failed to save API configuration: \(error)")
         }
     }
+}
+
+#Preview {
+    struct Previewer: View {
+        @Query private var projects: [TranslationProject]
+        var body: some View {
+            NavigationStack {
+                 APISettingsView(project: projects.first!)
+            }
+        }
+    }
+
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
+    
+    let project = TranslationProject(name: "My Awesome Novel", sourceLanguage: "Japanese", targetLanguage: "English")
+    let apiConfig = APIConfiguration(provider: .google, model: "gemini-1.5-flash-preview")
+    project.apiConfig = apiConfig
+    container.mainContext.insert(project)
+
+    return Previewer()
+        .modelContainer(container)
 }

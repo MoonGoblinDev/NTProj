@@ -6,26 +6,17 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		9048AF5C2DFACDB9001250A1 /* STTextView in Frameworks */ = {isa = PBXBuildFile; productRef = 9048AF5B2DFACDB9001250A1 /* STTextView */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		908891592DF842CE000B99B4 /* Novel Translator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Novel Translator.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		90D4C4B12DF9CA8400B40A0C /* Exceptions for "Novel Translator" folder in "Novel Translator" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"Novel-Translator-Info.plist",
-			);
-			target = 908891582DF842CE000B99B4 /* Novel Translator */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9088915B2DF842CE000B99B4 /* Novel Translator */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				90D4C4B12DF9CA8400B40A0C /* Exceptions for "Novel Translator" folder in "Novel Translator" target */,
-			);
 			path = "Novel Translator";
 			sourceTree = "<group>";
 		};
@@ -36,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9048AF5C2DFACDB9001250A1 /* STTextView in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +70,7 @@
 			);
 			name = "Novel Translator";
 			packageProductDependencies = (
+				9048AF5B2DFACDB9001250A1 /* STTextView */,
 			);
 			productName = "Novel Translator";
 			productReference = 908891592DF842CE000B99B4 /* Novel Translator.app */;
@@ -107,6 +100,9 @@
 			);
 			mainGroup = 908891502DF842CE000B99B4;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				9048AF5A2DFACDB9001250A1 /* XCRemoteSwiftPackageReference "STTextView" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 9088915A2DF842CE000B99B4 /* Products */;
 			projectDirPath = "";
@@ -334,6 +330,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		9048AF5A2DFACDB9001250A1 /* XCRemoteSwiftPackageReference "STTextView" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/krzyzanowskim/STTextView";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.7;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9048AF5B2DFACDB9001250A1 /* STTextView */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9048AF5A2DFACDB9001250A1 /* XCRemoteSwiftPackageReference "STTextView" */;
+			productName = STTextView;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 908891512DF842CE000B99B4 /* Project object */;
 }

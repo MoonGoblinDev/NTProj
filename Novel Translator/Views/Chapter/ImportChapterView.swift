@@ -8,25 +8,20 @@ import SwiftUI
 import SwiftData
 
 struct ImportChapterView: View {
-    @Environment(\.modelContext) private var modelContext // 1. Get context from environment
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
     let project: TranslationProject
     
     @State private var viewModel: ImportViewModel
     
-    // 2. The initializer is now simpler and more robust.
-    // It takes the project and prepares the State property for the viewModel.
     init(project: TranslationProject) {
         self.project = project
-        // We can't access modelContext here yet, so we initialize a dummy ViewModel.
-        // It will be replaced immediately when the view's body is accessed.
         _viewModel = State(initialValue: ImportViewModel(project: project, modelContext: .init(try! ModelContainer(for: TranslationProject.self))))
     }
     
     var body: some View {
         VStack(spacing: 20) {
-            // The content of the VStack remains the same as before...
             if viewModel.isImporting {
                 VStack {
                     ProgressView()
@@ -73,9 +68,7 @@ struct ImportChapterView: View {
                 Button("Select Files...") {
                     Task {
                         await viewModel.startImport()
-                        // Optional: dismiss the sheet automatically on success
                         if !viewModel.importMessage.contains("Error") && !viewModel.importMessage.contains("Cancelled") {
-                             // give a little delay for user to read the success message
                              try? await Task.sleep(for: .seconds(1.5))
                              dismiss()
                         }
@@ -87,11 +80,30 @@ struct ImportChapterView: View {
         }
         .padding(30)
         .frame(minWidth: 450, idealWidth: 500, minHeight: 350)
-        // 3. This is the crucial part.
-        // It runs once when the view appears, creating the viewModel
-        // with the *correct* modelContext from the environment.
         .onAppear {
             self.viewModel = ImportViewModel(project: project, modelContext: modelContext)
         }
     }
+}
+
+#Preview {
+    // Use a Query to get the project from the container
+    struct Previewer: View {
+        @Query private var projects: [TranslationProject]
+        
+        var body: some View {
+            if let project = projects.first {
+                ImportChapterView(project: project)
+            } else {
+                Text("No project found for preview.")
+            }
+        }
+    }
+    
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
+    container.mainContext.insert(TranslationProject(name: "Sample Project", sourceLanguage: "JP", targetLanguage: "EN"))
+    
+    return Previewer()
+        .modelContainer(container)
 }
