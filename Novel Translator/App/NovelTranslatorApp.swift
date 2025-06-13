@@ -37,5 +37,37 @@ struct NovelTranslatorApp: App {
         }
         .modelContainer(sharedModelContainer)
         .handlesExternalEvents(matching: Set(arrayLiteral: "noveltranslator"))
+        .commands {
+            // Replaces the standard "Save" item in the File menu
+            CommandGroup(replacing: .saveItem) {
+                Button("Save") {
+                    saveActiveChapter()
+                }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(!canSave())
+            }
+        }
+    }
+    
+    // MARK: - Menu Command Helpers
+    
+    /// Checks if the active chapter has unsaved changes.
+    private func canSave() -> Bool {
+        guard let activeID = workspaceViewModel.activeChapterID else {
+            return false
+        }
+        // The save option is enabled only if there's an active chapter
+        // and its editor state shows unsaved changes.
+        return workspaceViewModel.editorStates[activeID]?.hasUnsavedChanges ?? false
+    }
+    
+    /// Triggers the save action on the workspace view model.
+    private func saveActiveChapter() {
+        do {
+            try workspaceViewModel.saveChapter(id: workspaceViewModel.activeChapterID)
+        } catch {
+            // Error handling from a menu item is limited. We'll log it to the console.
+            print("Failed to save from menu command: \(error.localizedDescription)")
+        }
     }
 }

@@ -25,12 +25,7 @@ struct TranslationWorkspaceView: View {
     
     private var activeChapter: Chapter? {
         guard let activeID = workspaceViewModel.activeChapterID else { return nil }
-        for p in projects {
-            if let ch = p.chapters.first(where: { $0.id == activeID }) {
-                return ch
-            }
-        }
-        return nil
+        return workspaceViewModel.fetchChapter(with: activeID)
     }
 
     private var activeEditorState: ChapterEditorState? {
@@ -44,6 +39,10 @@ struct TranslationWorkspaceView: View {
     }
 
     var body: some View {
+        // FIX: Create a local bindable instance of the view model
+        // to correctly create bindings for its properties (e.g., for the .alert).
+        @Bindable var bindableWorkspaceViewModel = workspaceViewModel
+        
         ZStack {
             VStack(spacing: 0) {
                 editorOrPlaceholder
@@ -63,10 +62,6 @@ struct TranslationWorkspaceView: View {
                 .frame(minWidth: 200, idealWidth: 250)
             }
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("Save", systemImage: "square.and.arrow.down") {
-                    saveChanges()
-                }
-                .disabled(activeChapter == nil || viewModel.isTranslating || !(activeEditorState?.hasUnsavedChanges ?? true))
                 
                 Button("Translate", systemImage: "sparkles") {
                     Task {
@@ -119,6 +114,22 @@ struct TranslationWorkspaceView: View {
         }, message: {
             Text(viewModel?.errorMessage ?? "An unknown error occurred.")
         })
+        .alert(
+            "Unsaved Changes",
+            isPresented: $bindableWorkspaceViewModel.isCloseChapterAlertPresented,
+            presenting: workspaceViewModel.chapterIDToClose
+        ) { _ in
+            Button("Save Chapter") {
+                workspaceViewModel.saveAndCloseChapter()
+            }
+            Button("Discard Changes", role: .destructive) {
+                workspaceViewModel.discardAndCloseChapter()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { chapterID in
+            let title = workspaceViewModel.fetchChapter(with: chapterID)?.title ?? "this chapter"
+            Text("Do you want to save the changes you made to \"\(title)\"?\n\nYour changes will be lost if you don't save them.")
+        }
     }
     
     @ViewBuilder private var editorOrPlaceholder: some View {
@@ -208,9 +219,4 @@ struct TranslationWorkspaceView: View {
     }
 }
 
-// **FIX:** Re-add the missing extension.
-extension Range where Bound == String.Index {
-    func toNSRange(in string: String) -> NSRange {
-        return NSRange(self, in: string)
-    }
-}
+

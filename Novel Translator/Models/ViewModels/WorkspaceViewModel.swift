@@ -1,10 +1,3 @@
-//
-//  WorkspaceViewModel.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 12/06/25.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -15,6 +8,10 @@ class WorkspaceViewModel {
     var activeChapterID: PersistentIdentifier?
     var editorStates: [PersistentIdentifier: ChapterEditorState] = [:]
 
+    // State for managing the "unsaved changes" alert
+    var chapterIDToClose: PersistentIdentifier?
+    var isCloseChapterAlertPresented: Bool = false
+    
     private var modelContext: ModelContext
     
     init(modelContext: ModelContext) {
@@ -32,18 +29,52 @@ class WorkspaceViewModel {
     }
 
     func closeChapter(id: PersistentIdentifier) {
-        // In a real app, you'd prompt to save if hasUnsavedChanges is true.
-        // For now, we just discard the changes.
+        // If the chapter has unsaved changes, trigger the confirmation alert.
         if let state = editorStates[id], state.hasUnsavedChanges {
-            print("Closing chapter '\(fetchChapter(with: id)?.title ?? "")' with unsaved changes. Discarding.")
+            self.chapterIDToClose = id
+            self.isCloseChapterAlertPresented = true
+        } else {
+            // Otherwise, close it directly without an alert.
+            forceCloseChapter(id: id)
         }
+    }
 
+    /// Saves the chapter and then closes it. Called from the alert.
+    func saveAndCloseChapter() {
+        guard let id = chapterIDToClose else { return }
+        
+        Task {
+            do {
+                try saveChapter(id: id)
+                // If save is successful, proceed with closing.
+                forceCloseChapter(id: id)
+            } catch {
+                print("Failed to save chapter before closing: \(error)")
+                // In case of error, just dismiss the alert and leave the chapter open.
+                isCloseChapterAlertPresented = false
+                chapterIDToClose = nil
+            }
+        }
+    }
+    
+    /// Discards changes and closes the chapter. Called from the alert.
+    func discardAndCloseChapter() {
+        guard let id = chapterIDToClose else { return }
+        forceCloseChapter(id: id)
+    }
+    
+    /// The core logic to close a chapter, now separated for re-use.
+    private func forceCloseChapter(id: PersistentIdentifier) {
         editorStates.removeValue(forKey: id)
         openChapterIDs.removeAll { $0 == id }
 
         if activeChapterID == id {
             activeChapterID = openChapterIDs.last
         }
+        
+        // Reset alert state
+        isCloseChapterAlertPresented = false
+        chapterIDToClose = nil
     }
 
     func saveChapter(id: PersistentIdentifier?) throws {
@@ -74,12 +105,15 @@ class WorkspaceViewModel {
     
     func closeAllChapters() {
         // A simple implementation that discards all changes.
+        // A more robust app would check for any unsaved changes here.
         openChapterIDs.removeAll()
         activeChapterID = nil
         editorStates.removeAll()
     }
 
-    private func fetchChapter(with id: PersistentIdentifier) -> Chapter? {
+    /// **FIXED:** Fetches a chapter directly from the model context using its persistent ID.
+    /// This method is now accessible by the View layer for displaying alert messages.
+    func fetchChapter(with id: PersistentIdentifier) -> Chapter? {
         let descriptor = FetchDescriptor<Chapter>(predicate: #Predicate { $0.persistentModelID == id })
         return try? self.modelContext.fetch(descriptor).first
     }
