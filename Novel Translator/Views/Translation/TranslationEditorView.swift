@@ -35,8 +35,6 @@ struct TranslationEditorView: View {
                     selection: $sourceSelection,
                     options: textViewOptions
                 )
-                // REMOVED: .textViewFont() is no longer needed.
-                // The font is now part of the AttributedString itself.
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             

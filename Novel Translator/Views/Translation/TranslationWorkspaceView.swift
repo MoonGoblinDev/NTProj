@@ -7,10 +7,10 @@ struct TranslationWorkspaceView: View {
     @Environment(\.modelContext) private var modelContext
     
     @Binding var selectedChapterID: PersistentIdentifier?
-    @Query private var chapters: [Chapter]
-    
     let projects: [TranslationProject]
     @Binding var selectedProjectID: PersistentIdentifier?
+    
+    @State private var chapter: Chapter?
     
     @State private var isCreatingProject = false
     @State private var viewModel: TranslationViewModel!
@@ -19,13 +19,13 @@ struct TranslationWorkspaceView: View {
     @State private var translatedAttributedText: AttributedString = ""
     
     @State private var sourceSelection: NSRange?
+    @State private var translatedSelection: NSRange?
     
     @State private var entryToDisplay: GlossaryEntry?
     @State private var glossaryMatches: [GlossaryMatch] = []
     
     private let glossaryMatcher = GlossaryMatcher()
     
-    private var chapter: Chapter? { chapters.first }
     private var project: TranslationProject? {
         guard let selectedProjectID else { return nil }
         return projects.first { $0.id == selectedProjectID }
@@ -35,13 +35,6 @@ struct TranslationWorkspaceView: View {
         _selectedChapterID = selectedChapterID
         self.projects = projects
         _selectedProjectID = selectedProjectID
-        
-        let id = selectedChapterID.wrappedValue
-        let predicate = id.map { finalID in
-            #Predicate<Chapter> { $0.persistentModelID == finalID }
-        } ?? #Predicate<Chapter> { _ in false }
-        
-        _chapters = Query(filter: predicate)
     }
 
     var body: some View {
@@ -65,12 +58,11 @@ struct TranslationWorkspaceView: View {
                 Button("Save", systemImage: "square.and.arrow.down") {
                     saveChanges()
                 }
-                .disabled(chapter == nil)
+                .disabled(chapter == nil || viewModel.isTranslating)
                 
                 Button("Translate", systemImage: "sparkles") {
                     Task {
                         await viewModel.streamTranslateChapter(chapter)
-                        setTranslatedText(viewModel.translationText)
                     }
                 }
                 .disabled(chapter == nil || chapter?.rawContent.isEmpty == true || viewModel?.isTranslating == true)
@@ -79,7 +71,9 @@ struct TranslationWorkspaceView: View {
         .sheet(isPresented: $isCreatingProject) { CreateProjectView() }
         .sheet(isPresented: $appContext.isSheetPresented, onDismiss: { appContext.glossaryEntryToEditID = nil }) {
             if let entry = entryToDisplay, let project = self.project {
-                GlossaryDetailView(entry: entry, project: project)
+                NavigationStack {
+                    GlossaryDetailView(entry: entry, project: project)
+                }
             } else {
                 Text("Error: Could not find glossary item.").padding()
             }
@@ -88,31 +82,22 @@ struct TranslationWorkspaceView: View {
             if viewModel == nil {
                 viewModel = TranslationViewModel(modelContext: modelContext)
             }
-            // Load the initially selected chapter, if any
-            if let chapter = self.chapter {
-                loadChapter(chapter)
-            }
+            updateChapter(from: selectedChapterID)
         }
         .onChange(of: selectedChapterID) { _, newID in
-            // This is now the single source of truth for loading a new chapter.
-            guard let newID = newID else {
-                // If selection is cleared, clear the editors.
-                sourceAttributedText = ""
-                translatedAttributedText = ""
-                return
-            }
-            
-            // Manually fetch the chapter to avoid race conditions with the @Query.
-            let descriptor = FetchDescriptor<Chapter>(predicate: #Predicate { $0.persistentModelID == newID })
-            if let chapterToLoad = try? modelContext.fetch(descriptor).first {
-                loadChapter(chapterToLoad)
+            updateChapter(from: newID)
+        }
+        .onChange(of: viewModel?.translationText) { _, newText in
+            if let text = newText {
+                setTranslatedText(text)
             }
         }
         .onChange(of: sourceSelection) { _, newSelection in
             handleSelectionChange(newSelection)
         }
+        // **FIX #1:** Correctly compare the string content, not the debug description.
         .onChange(of: sourceAttributedText) { oldValue, newValue in
-            if oldValue.description != newValue.description {
+            if String(oldValue.characters) != String(newValue.characters) {
                  updateSourceHighlights()
             }
         }
@@ -131,51 +116,127 @@ struct TranslationWorkspaceView: View {
             Text(viewModel?.errorMessage ?? "An unknown error occurred.")
         })
     }
-
     
-    @ViewBuilder private var editorOrPlaceholder: some View { if let chapter = self.chapter, self.viewModel != nil { TranslationEditorView(sourceText: $sourceAttributedText, translatedText: $translatedAttributedText, sourceSelection: $sourceSelection, translatedSelection: .constant(nil), chapter: chapter, isDisabled: viewModel.isTranslating) } else { ContentUnavailableView("No Chapter Selected", systemImage: "text.book.closed", description: Text("Select a chapter from the list in the sidebar.")) } }
+    @ViewBuilder private var editorOrPlaceholder: some View {
+        if let chapter = self.chapter, self.viewModel != nil {
+            TranslationEditorView(
+                sourceText: $sourceAttributedText,
+                translatedText: $translatedAttributedText,
+                sourceSelection: $sourceSelection,
+                translatedSelection: $translatedSelection,
+                chapter: chapter,
+                isDisabled: viewModel.isTranslating
+            )
+        } else {
+            ContentUnavailableView(
+                "No Chapter Selected",
+                systemImage: "text.book.closed",
+                description: Text("Select a chapter from the list in the sidebar.")
+            )
+        }
+    }
     
-    @ViewBuilder private var loadingOverlay: some View { ProgressView().progressViewStyle(.circular).padding().background(.regularMaterial, in: Circle()).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding().transition(.opacity.animation(.easeInOut)) }
+    @ViewBuilder private var loadingOverlay: some View {
+        ProgressView()
+            .progressViewStyle(.circular)
+            .padding()
+            .background(.regularMaterial, in: Circle())
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .padding()
+            .transition(.opacity.animation(.easeInOut))
+    }
     
-    private func saveChanges() { guard let chapter = chapter else { return }; let newRawContent = sourceAttributedText.description; let newTranslatedContent = translatedAttributedText.description; var hasChanges = false; if chapter.rawContent != newRawContent { chapter.rawContent = newRawContent; hasChanges = true }; if chapter.translatedContent ?? "" != newTranslatedContent { chapter.translatedContent = newTranslatedContent; hasChanges = true }; if hasChanges { chapter.project?.lastModifiedDate = Date(); do { try modelContext.save(); print("Changes saved successfully.") } catch { print("Failed to save changes: \(error)") } } }
+    private func updateChapter(from id: PersistentIdentifier?) {
+        guard let id = id else {
+            self.chapter = nil
+            sourceAttributedText = ""
+            translatedAttributedText = ""
+            sourceSelection = nil
+            translatedSelection = nil
+            return
+        }
+        
+        let descriptor = FetchDescriptor<Chapter>(predicate: #Predicate { $0.persistentModelID == id })
+        if let chapterToLoad = try? modelContext.fetch(descriptor).first {
+            self.chapter = chapterToLoad
+            loadChapter(chapterToLoad)
+        } else {
+            self.chapter = nil
+            sourceAttributedText = ""
+            translatedAttributedText = ""
+            sourceSelection = nil
+            translatedSelection = nil
+        }
+    }
     
-    private func handleSelectionChange(_ selection: NSRange?) { guard let selection, selection.length == 0 else { return }; if let match = glossaryMatches.first(where: { NSLocationInRange(selection.location, $0.range.toNSRange(in: sourceAttributedText.description)) }) { appContext.glossaryEntryToEditID = match.entry.id } }
+    private func saveChanges() {
+        guard let chapter = self.chapter else { return }
+        
+        // **FIX #2:** Use `String(attributedString.characters)` to get the plain text.
+        let rawContent = String(sourceAttributedText.characters)
+        let translatedContent = String(translatedAttributedText.characters)
+        
+        let service = TranslationService(modelContext: modelContext)
+        do {
+            try service.saveManualChanges(
+                for: chapter,
+                rawContent: rawContent,
+                translatedContent: translatedContent
+            )
+        } catch {
+            viewModel.errorMessage = "Failed to save manual changes: \(error.localizedDescription)"
+        }
+    }
     
-    private func getBaseAttributes() -> AttributeContainer { var container = AttributeContainer(); container.foregroundColor = NSColor.textColor; container.font = NSFont.systemFont(ofSize: 14, weight: .regular); return container }
-    
-    private func setTranslatedText(_ text: String) { self.translatedAttributedText = AttributedString(text, attributes: getBaseAttributes()) }
-
-    /// A dedicated function to load content from a specific chapter object.
     private func loadChapter(_ chapterToLoad: Chapter) {
-        // Set the source text from the guaranteed correct chapter.
+        sourceSelection = nil
+        translatedSelection = nil
+        
         sourceAttributedText = AttributedString(chapterToLoad.rawContent, attributes: getBaseAttributes())
         
-        // Update the view model and translated text.
         viewModel.setChapter(chapterToLoad)
         setTranslatedText(viewModel.translationText)
-        
-        // Highlights will be applied automatically by the .onChange(of: sourceAttributedText) modifier.
+    }
+    
+    private func handleSelectionChange(_ selection: NSRange?) {
+        guard let selection, selection.length == 0 else { return }
+        // Using .description here is acceptable as it's for range calculation, not content.
+        if let match = glossaryMatches.first(where: { NSLocationInRange(selection.location, $0.range.toNSRange(in: sourceAttributedText.description)) }) {
+            appContext.glossaryEntryToEditID = match.entry.id
+        }
+    }
+    
+    private func getBaseAttributes() -> AttributeContainer {
+        var container = AttributeContainer()
+        container.foregroundColor = NSColor.textColor
+        container.font = NSFont.systemFont(ofSize: 14, weight: .regular)
+        return container
+    }
+    
+    private func setTranslatedText(_ text: String) {
+        self.translatedAttributedText = AttributedString(text, attributes: getBaseAttributes())
     }
 
-    /// Applies highlights to the source text. (This function is now correct, but the calling logic was flawed).
     private func updateSourceHighlights() {
-        guard let project = project, !sourceAttributedText.description.isEmpty else { return }
+        guard let project = project, !sourceAttributedText.description.isEmpty else {
+            self.glossaryMatches = []
+            return
+        }
         
-        let stringToMatch = sourceAttributedText.description
-        let fullNSRange = NSRange(location: 0, length: stringToMatch.count)
+        let stringToMatch = String(sourceAttributedText.characters)
+        let fullNSRange = NSRange(location: 0, length: stringToMatch.utf16.count)
         
         guard let fullRange = Range(fullNSRange, in: sourceAttributedText) else { return }
         
-        // Clear previous highlights
-        sourceAttributedText[fullRange].underlineStyle = nil
         sourceAttributedText[fullRange].foregroundColor = NSColor.textColor
+        sourceAttributedText[fullRange].underlineStyle = nil
+        sourceAttributedText[fullRange].link = nil
 
-        // Find and apply new highlights
         self.glossaryMatches = glossaryMatcher.detectTerms(in: stringToMatch, from: project.glossaryEntries)
 
         var highlightContainer = AttributeContainer()
         highlightContainer.underlineStyle = .single
-        highlightContainer.foregroundColor = .gold
+        highlightContainer.foregroundColor = NSColor(Color.gold)
         
         for match in glossaryMatches {
             if let range = Range(match.range, in: sourceAttributedText) {
@@ -185,9 +246,8 @@ struct TranslationWorkspaceView: View {
     }
 }
 
-
-
-
 extension Range where Bound == String.Index {
-    func toNSRange(in string: String) -> NSRange { return NSRange(self, in: string) }
+    func toNSRange(in string: String) -> NSRange {
+        return NSRange(self, in: string)
+    }
 }

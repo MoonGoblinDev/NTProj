@@ -8,6 +8,7 @@ enum TranslationError: LocalizedError {
     case llmServiceError(Error)
     case statsNotFound
     case factoryError(Error)
+    case noCurrentVersion
     
     var errorDescription: String? {
         switch self {
@@ -21,6 +22,8 @@ enum TranslationError: LocalizedError {
             return "Could not find the statistics object for this project."
         case .factoryError(let error):
             return "Could not create LLM service: \(error.localizedDescription)"
+        case .noCurrentVersion:
+            return "Could not find a current version to save changes to."
         }
     }
 }
@@ -79,7 +82,6 @@ class TranslationService {
         // 6. Update glossary usage
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
         for match in matches {
-            // Since `match.entry` is a reference to the model, we can modify it directly.
             match.entry.usageCount += 1
             match.entry.lastUsedDate = Date()
         }
@@ -88,14 +90,57 @@ class TranslationService {
         try modelContext.save()
     }
     
-    /// Helper method to consolidate the logic for updating project statistics.
+    /// **NEW:** A dedicated function for saving manual edits from the UI.
+    func saveManualChanges(for chapter: Chapter, rawContent: String, translatedContent: String) throws {
+        var hasChanges = false
+        
+        // Update raw content if it changed
+        if chapter.rawContent != rawContent {
+            chapter.rawContent = rawContent
+            hasChanges = true
+        }
+
+        // Update translated content if it changed
+        if (chapter.translatedContent ?? "") != translatedContent {
+            chapter.translatedContent = translatedContent
+            
+            // Also update the content of the "current" translation version
+            if let currentVersion = chapter.translationVersions.first(where: { $0.isCurrentVersion }) {
+                currentVersion.content = translatedContent
+            } else if !translatedContent.isEmpty {
+                // If there's no version history yet, create the first one.
+                let newVersion = TranslationVersion(versionNumber: 1, content: translatedContent, llmModel: "Manual Edit")
+                newVersion.chapter = chapter
+                modelContext.insert(newVersion)
+            }
+            hasChanges = true
+        }
+
+        // Only save if there were actual changes
+        if hasChanges {
+            chapter.project?.lastModifiedDate = Date()
+            print("Saving manual changes...")
+            try modelContext.save()
+            print("Manual changes saved successfully.")
+        }
+    }
+    
+    /// **MODIFIED:** Helper method to consolidate the logic for updating project statistics.
+    /// This is now robust and will create a stats object if one doesn't exist.
     private func updateStatsAfterTranslation(for chapter: Chapter, inputTokens: Int?, outputTokens: Int?, translationTime: TimeInterval) throws {
         guard let project = chapter.project else { return }
         let projectId = project.id
         let descriptor = FetchDescriptor<TranslationStats>(predicate: #Predicate { $0.projectId == projectId })
         
-        guard let stats = try modelContext.fetch(descriptor).first else {
-            throw TranslationError.statsNotFound
+        // Try to fetch stats, but if it fails, create a new one.
+        let stats: TranslationStats
+        if let existingStats = try modelContext.fetch(descriptor).first {
+            stats = existingStats
+        } else {
+            print("Warning: TranslationStats not found for project \(project.name). Creating a new one.")
+            let newStats = TranslationStats(projectId: projectId)
+            modelContext.insert(newStats)
+            stats = newStats
         }
         
         // Update general stats
@@ -112,7 +157,6 @@ class TranslationService {
         let previouslyCompleted = Double(stats.completedChapters)
         
         // Increment completion counts only if this is the first translation for this chapter.
-        // The new version was just added, so the count will be 1 if it was the first.
         if chapter.translationVersions.count == 1 {
             stats.completedChapters += 1
             stats.translatedWords += chapter.wordCount
@@ -122,18 +166,15 @@ class TranslationService {
         if stats.completedChapters > 0 {
             let totalCompletedTime = (stats.averageTranslationTime * previouslyCompleted) + translationTime
             stats.averageTranslationTime = totalCompletedTime / Double(stats.completedChapters)
-        } else {
-            stats.averageTranslationTime = 0 // Should not happen if we just completed one, but safe to have.
         }
         
         stats.lastUpdated = Date()
         
         // TODO: Add real cost calculation logic based on model
-        stats.estimatedCost += Double(tokensUsed) * 0.000002 // Placeholder cost (e.g., $2/1M tokens)
+        stats.estimatedCost += Double(tokensUsed) * 0.000002 // Placeholder cost
     }
     
-    // NOTE: This original non-streaming method is kept for potential future use or for LLMs that don't support streaming.
-    // It is not currently called by the UI.
+    // NOTE: This original non-streaming method is kept for potential future use.
     func translateChapter(_ chapter: Chapter) async throws {
         guard let project = chapter.project else { throw TranslationError.projectNotFound }
         guard let apiConfig = project.apiConfig else { throw TranslationError.apiConfigMissing }
