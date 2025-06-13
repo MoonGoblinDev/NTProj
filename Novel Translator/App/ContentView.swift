@@ -4,9 +4,10 @@ import SwiftData
 struct ContentView: View {
     // Access the shared state object from the environment.
     @EnvironmentObject private var appContext: AppContext
+    @Environment(WorkspaceViewModel.self) private var workspaceViewModel
     
     @State private var selectedProjectID: PersistentIdentifier?
-    @State private var selectedChapterID: PersistentIdentifier?
+    // REMOVED: @State private var selectedChapterID: PersistentIdentifier?
 
     @Query(sort: \TranslationProject.lastModifiedDate, order: .reverse) private var projects: [TranslationProject]
     
@@ -14,14 +15,12 @@ struct ContentView: View {
         NavigationSplitView {
             SidebarView(
                 selectedProjectID: $selectedProjectID,
-                selectedChapterID: $selectedChapterID,
                 projects: projects
             )
             .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 600)
 
         } detail: {
             TranslationWorkspaceView(
-                selectedChapterID: $selectedChapterID,
                 projects: projects,
                 selectedProjectID: $selectedProjectID
             )
@@ -32,7 +31,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: selectedProjectID) {
-            selectedChapterID = nil
+            workspaceViewModel.closeAllChapters()
         }
         // The .onOpenURL now has a much simpler job.
         .onOpenURL { url in

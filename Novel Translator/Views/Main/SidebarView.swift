@@ -3,7 +3,6 @@ import SwiftData
 
 struct SidebarView: View {
     @Binding var selectedProjectID: PersistentIdentifier?
-    @Binding var selectedChapterID: PersistentIdentifier?
     var projects: [TranslationProject]
     
     @State private var selectedTab: SidebarTab = .chapters
@@ -30,7 +29,7 @@ struct SidebarView: View {
                     // The content for the selected tab
                     switch selectedTab {
                     case .chapters:
-                        ChapterListView(project: project, selectedChapterID: $selectedChapterID)
+                        ChapterListView(project: project)
                     case .glossary:
                         GlossaryView(project: project)
                     case .settings:

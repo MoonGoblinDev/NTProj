@@ -5,21 +5,13 @@ import STTextViewSwiftUI
 struct TranslationWorkspaceView: View {
     @EnvironmentObject private var appContext: AppContext
     @Environment(\.modelContext) private var modelContext
+    @Environment(WorkspaceViewModel.self) private var workspaceViewModel
     
-    @Binding var selectedChapterID: PersistentIdentifier?
     let projects: [TranslationProject]
     @Binding var selectedProjectID: PersistentIdentifier?
     
-    @State private var chapter: Chapter?
-    
     @State private var isCreatingProject = false
     @State private var viewModel: TranslationViewModel!
-    
-    @State private var sourceAttributedText: AttributedString = ""
-    @State private var translatedAttributedText: AttributedString = ""
-    
-    @State private var sourceSelection: NSRange?
-    @State private var translatedSelection: NSRange?
     
     @State private var entryToDisplay: GlossaryEntry?
     @State private var glossaryMatches: [GlossaryMatch] = []
@@ -31,15 +23,31 @@ struct TranslationWorkspaceView: View {
         return projects.first { $0.id == selectedProjectID }
     }
     
-    init(selectedChapterID: Binding<PersistentIdentifier?>, projects: [TranslationProject], selectedProjectID: Binding<PersistentIdentifier?>) {
-        _selectedChapterID = selectedChapterID
+    private var activeChapter: Chapter? {
+        guard let activeID = workspaceViewModel.activeChapterID else { return nil }
+        for p in projects {
+            if let ch = p.chapters.first(where: { $0.id == activeID }) {
+                return ch
+            }
+        }
+        return nil
+    }
+
+    private var activeEditorState: ChapterEditorState? {
+        guard let activeID = workspaceViewModel.activeChapterID else { return nil }
+        return workspaceViewModel.editorStates[activeID]
+    }
+    
+    init(projects: [TranslationProject], selectedProjectID: Binding<PersistentIdentifier?>) {
         self.projects = projects
         _selectedProjectID = selectedProjectID
     }
 
     var body: some View {
         ZStack {
-            editorOrPlaceholder
+            VStack(spacing: 0) {
+                editorOrPlaceholder
+            }
             
             if viewModel?.isTranslating == true {
                 loadingOverlay
@@ -58,14 +66,14 @@ struct TranslationWorkspaceView: View {
                 Button("Save", systemImage: "square.and.arrow.down") {
                     saveChanges()
                 }
-                .disabled(chapter == nil || viewModel.isTranslating)
+                .disabled(activeChapter == nil || viewModel.isTranslating || !(activeEditorState?.hasUnsavedChanges ?? true))
                 
                 Button("Translate", systemImage: "sparkles") {
                     Task {
-                        await viewModel.streamTranslateChapter(chapter)
+                        await viewModel.streamTranslateChapter(activeChapter)
                     }
                 }
-                .disabled(chapter == nil || chapter?.rawContent.isEmpty == true || viewModel?.isTranslating == true)
+                .disabled(activeChapter == nil || activeChapter?.rawContent.isEmpty == true || viewModel?.isTranslating == true)
             }
         }
         .sheet(isPresented: $isCreatingProject) { CreateProjectView() }
@@ -82,24 +90,20 @@ struct TranslationWorkspaceView: View {
             if viewModel == nil {
                 viewModel = TranslationViewModel(modelContext: modelContext)
             }
-            updateChapter(from: selectedChapterID)
-        }
-        .onChange(of: selectedChapterID) { _, newID in
-            updateChapter(from: newID)
         }
         .onChange(of: viewModel?.translationText) { _, newText in
-            if let text = newText {
-                setTranslatedText(text)
+            if let text = newText, let state = activeEditorState {
+                state.updateTranslation(newText: text)
             }
         }
-        .onChange(of: sourceSelection) { _, newSelection in
-            handleSelectionChange(newSelection)
-        }
-        // **FIX #1:** Correctly compare the string content, not the debug description.
-        .onChange(of: sourceAttributedText) { oldValue, newValue in
-            if String(oldValue.characters) != String(newValue.characters) {
+        .onChange(of: activeEditorState?.sourceAttributedText) { oldValue, newValue in
+            guard let oldVal = oldValue, let newVal = newValue else { return }
+            if String(oldVal.characters) != String(newVal.characters) {
                  updateSourceHighlights()
             }
+        }
+        .onChange(of: activeEditorState?.sourceSelection) { _, newSelection in
+            handleSelectionChange(newSelection)
         }
         .onChange(of: appContext.glossaryEntryToEditID) { _, newID in
             guard let newID = newID else {
@@ -118,21 +122,24 @@ struct TranslationWorkspaceView: View {
     }
     
     @ViewBuilder private var editorOrPlaceholder: some View {
-        if let chapter = self.chapter, self.viewModel != nil {
+        if let chapter = activeChapter, let editorState = activeEditorState {
+            ChapterTabsView(workspaceViewModel: workspaceViewModel, projects: projects)
             TranslationEditorView(
-                sourceText: $sourceAttributedText,
-                translatedText: $translatedAttributedText,
-                sourceSelection: $sourceSelection,
-                translatedSelection: $translatedSelection,
+                sourceText: .init(get: { editorState.sourceAttributedText }, set: { editorState.sourceAttributedText = $0 }),
+                translatedText: .init(get: { editorState.translatedAttributedText }, set: { editorState.translatedAttributedText = $0 }),
+                sourceSelection: .init(get: { editorState.sourceSelection }, set: { editorState.sourceSelection = $0 }),
+                translatedSelection: .init(get: { editorState.translatedSelection }, set: { editorState.translatedSelection = $0 }),
                 chapter: chapter,
                 isDisabled: viewModel.isTranslating
             )
-        } else {
+        } else if project != nil {
             ContentUnavailableView(
                 "No Chapter Selected",
                 systemImage: "text.book.closed",
                 description: Text("Select a chapter from the list in the sidebar.")
             )
+        } else {
+            WelcomeView()
         }
     }
     
@@ -146,91 +153,43 @@ struct TranslationWorkspaceView: View {
             .transition(.opacity.animation(.easeInOut))
     }
     
-    private func updateChapter(from id: PersistentIdentifier?) {
-        guard let id = id else {
-            self.chapter = nil
-            sourceAttributedText = ""
-            translatedAttributedText = ""
-            sourceSelection = nil
-            translatedSelection = nil
-            return
-        }
-        
-        let descriptor = FetchDescriptor<Chapter>(predicate: #Predicate { $0.persistentModelID == id })
-        if let chapterToLoad = try? modelContext.fetch(descriptor).first {
-            self.chapter = chapterToLoad
-            loadChapter(chapterToLoad)
-        } else {
-            self.chapter = nil
-            sourceAttributedText = ""
-            translatedAttributedText = ""
-            sourceSelection = nil
-            translatedSelection = nil
-        }
-    }
-    
     private func saveChanges() {
-        guard let chapter = self.chapter else { return }
-        
-        // **FIX #2:** Use `String(attributedString.characters)` to get the plain text.
-        let rawContent = String(sourceAttributedText.characters)
-        let translatedContent = String(translatedAttributedText.characters)
-        
-        let service = TranslationService(modelContext: modelContext)
-        do {
-            try service.saveManualChanges(
-                for: chapter,
-                rawContent: rawContent,
-                translatedContent: translatedContent
-            )
-        } catch {
-            viewModel.errorMessage = "Failed to save manual changes: \(error.localizedDescription)"
+        Task {
+            do {
+                try workspaceViewModel.saveChapter(id: workspaceViewModel.activeChapterID)
+            } catch {
+                viewModel.errorMessage = "Failed to save changes: \(error.localizedDescription)"
+            }
         }
     }
-    
-    private func loadChapter(_ chapterToLoad: Chapter) {
-        sourceSelection = nil
-        translatedSelection = nil
-        
-        sourceAttributedText = AttributedString(chapterToLoad.rawContent, attributes: getBaseAttributes())
-        
-        viewModel.setChapter(chapterToLoad)
-        setTranslatedText(viewModel.translationText)
-    }
-    
+
     private func handleSelectionChange(_ selection: NSRange?) {
-        guard let selection, selection.length == 0 else { return }
-        // Using .description here is acceptable as it's for range calculation, not content.
-        if let match = glossaryMatches.first(where: { NSLocationInRange(selection.location, $0.range.toNSRange(in: sourceAttributedText.description)) }) {
+        guard let selection, selection.length == 0, let state = activeEditorState else { return }
+        if let match = glossaryMatches.first(where: { NSLocationInRange(selection.location, $0.range.toNSRange(in: String(state.sourceAttributedText.characters))) }) {
             appContext.glossaryEntryToEditID = match.entry.id
         }
     }
-    
-    private func getBaseAttributes() -> AttributeContainer {
-        var container = AttributeContainer()
-        container.foregroundColor = NSColor.textColor
-        container.font = NSFont.systemFont(ofSize: 14, weight: .regular)
-        return container
-    }
-    
-    private func setTranslatedText(_ text: String) {
-        self.translatedAttributedText = AttributedString(text, attributes: getBaseAttributes())
-    }
 
     private func updateSourceHighlights() {
-        guard let project = project, !sourceAttributedText.description.isEmpty else {
+        guard let project = project, let editorState = activeEditorState else {
+            self.glossaryMatches = []
+            return
+        }
+        let stringToMatch = String(editorState.sourceAttributedText.characters)
+        guard !stringToMatch.isEmpty else {
             self.glossaryMatches = []
             return
         }
         
-        let stringToMatch = String(sourceAttributedText.characters)
+        // This is a complex operation that modifies the attributed string in place.
+        var mutableText = editorState.sourceAttributedText
+        
         let fullNSRange = NSRange(location: 0, length: stringToMatch.utf16.count)
+        guard let fullRange = Range(fullNSRange, in: mutableText) else { return }
         
-        guard let fullRange = Range(fullNSRange, in: sourceAttributedText) else { return }
-        
-        sourceAttributedText[fullRange].foregroundColor = NSColor.textColor
-        sourceAttributedText[fullRange].underlineStyle = nil
-        sourceAttributedText[fullRange].link = nil
+        mutableText[fullRange].foregroundColor = NSColor.textColor
+        mutableText[fullRange].underlineStyle = nil
+        mutableText[fullRange].link = nil
 
         self.glossaryMatches = glossaryMatcher.detectTerms(in: stringToMatch, from: project.glossaryEntries)
 
@@ -239,13 +198,17 @@ struct TranslationWorkspaceView: View {
         highlightContainer.foregroundColor = NSColor(Color.gold)
         
         for match in glossaryMatches {
-            if let range = Range(match.range, in: sourceAttributedText) {
-                sourceAttributedText[range].mergeAttributes(highlightContainer, mergePolicy: .keepNew)
+            if let range = Range(match.range, in: mutableText) {
+                mutableText[range].mergeAttributes(highlightContainer, mergePolicy: .keepNew)
             }
         }
+        
+        // Assign the modified string back to the state.
+        editorState.sourceAttributedText = mutableText
     }
 }
 
+// **FIX:** Re-add the missing extension.
 extension Range where Bound == String.Index {
     func toNSRange(in string: String) -> NSRange {
         return NSRange(self, in: string)
