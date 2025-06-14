@@ -14,7 +14,6 @@ struct TranslationEditorView: View {
     
     let chapter: Chapter
     let isDisabled: Bool
-    let onShowPromptPreview: () -> Void
     
     // The options are a nested type of the SwiftUI wrapper view.
     private let textViewOptions: TextView.Options = [
@@ -45,14 +44,8 @@ struct TranslationEditorView: View {
             // --- Right Panel: Translated Text ---
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text("Translation: \(chapter.project?.targetLanguage ?? "") (\(chapter.translationStatus.rawValue))")
+                    Text("Translation: \(chapter.project?.targetLanguage ?? "")")
                         .font(.headline)
-                    Spacer()
-                    Button("Prompt Preview", systemImage: "sparkles.square.filled.on.square") {
-                        onShowPromptPreview()
-                    }
-                    .help("Show the final prompt that will be sent to the AI")
-                    .disabled(chapter.rawContent.isEmpty)
                 }
                 .frame(height: 10)
                 .padding()

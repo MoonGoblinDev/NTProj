@@ -82,7 +82,7 @@ struct TranslationWorkspaceView: View {
                     Button {
                         isPresetsViewPresented = true
                     } label: {
-                        Label("Manage Prompts", systemImage: "wand.and.stars")
+                        Label("Manage Prompts", systemImage: "text.quote")
                     }
                     
                     Menu {
@@ -96,7 +96,6 @@ struct TranslationWorkspaceView: View {
                         .pickerStyle(.inline)
                     } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: "text.quote")
                             Text(selectedPresetName)
                                 .lineLimit(1)
                         }
@@ -136,13 +135,6 @@ struct TranslationWorkspaceView: View {
                     .menuIndicator(.visible)
                     .fixedSize()
                     .disabled(project.apiConfigurations.allSatisfy { $0.enabledModels.isEmpty })
-                    
-                    Button("Translate", systemImage: "sparkles") {
-                        Task {
-                            await viewModel.streamTranslateChapter(activeChapter)
-                        }
-                    }
-                    .disabled(activeChapter == nil || activeChapter?.rawContent.isEmpty == true || viewModel?.isTranslating == true)
                 }
             }
         }
@@ -248,15 +240,52 @@ struct TranslationWorkspaceView: View {
     @ViewBuilder private var editorOrPlaceholder: some View {
         if let chapter = activeChapter, let editorState = activeEditorState {
             ChapterTabsView(workspaceViewModel: workspaceViewModel, projects: projects)
-            TranslationEditorView(
-                sourceText: .init(get: { editorState.sourceAttributedText }, set: { editorState.sourceAttributedText = $0 }),
-                translatedText: .init(get: { editorState.translatedAttributedText }, set: { editorState.translatedAttributedText = $0 }),
-                sourceSelection: .init(get: { editorState.sourceSelection }, set: { editorState.sourceSelection = $0 }),
-                translatedSelection: .init(get: { editorState.translatedSelection }, set: { editorState.translatedSelection = $0 }),
-                chapter: chapter,
-                isDisabled: viewModel.isTranslating,
-                onShowPromptPreview: { generatePromptPreview() }
-            )
+            ZStack{
+                TranslationEditorView(
+                    sourceText: .init(get: { editorState.sourceAttributedText }, set: { editorState.sourceAttributedText = $0 }),
+                    translatedText: .init(get: { editorState.translatedAttributedText }, set: { editorState.translatedAttributedText = $0 }),
+                    sourceSelection: .init(get: { editorState.sourceSelection }, set: { editorState.sourceSelection = $0 }),
+                    translatedSelection: .init(get: { editorState.translatedSelection }, set: { editorState.translatedSelection = $0 }),
+                    chapter: chapter,
+                    isDisabled: viewModel.isTranslating
+                )
+                VStack{
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button("Prompt Preview", systemImage: "sparkles.square.filled.on.square") {
+                            generatePromptPreview()
+                        }
+                        .help("Show the final prompt that will be sent to the AI")
+                        .disabled(chapter.rawContent.isEmpty)
+                        .onHover { isHovering in
+                            if isHovering && !chapter.rawContent.isEmpty {
+                                NSCursor.pointingHand.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
+                        
+                        Button("Translate", systemImage: "sparkles") {
+                            Task {
+                                await viewModel.streamTranslateChapter(activeChapter)
+                            }
+                        }
+                        .disabled(activeChapter == nil || activeChapter?.rawContent.isEmpty == true || viewModel?.isTranslating == true)
+                        .onHover { isHovering in
+                            let isDisabled = activeChapter == nil || activeChapter?.rawContent.isEmpty == true || viewModel?.isTranslating == true
+                            if isHovering && !isDisabled {
+                                NSCursor.pointingHand.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
+                    }
+                    .frame(height: 10)
+                    .padding()
+                }
+            }
+            
         } else if project != nil {
             ContentUnavailableView(
                 "No Chapter Selected",
