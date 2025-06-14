@@ -177,7 +177,9 @@ class TranslationService {
     // NOTE: This original non-streaming method is kept for potential future use.
     func translateChapter(_ chapter: Chapter) async throws {
         guard let project = chapter.project else { throw TranslationError.projectNotFound }
-        guard let apiConfig = project.apiConfig else { throw TranslationError.apiConfigMissing }
+        guard let apiConfig = project.apiConfigurations.first(where: { $0.provider == project.selectedProvider }) else { throw TranslationError.apiConfigMissing }
+        guard !project.selectedModel.isEmpty else { throw TranslationError.apiConfigMissing }
+
 
         let startTime = Date()
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
@@ -195,7 +197,7 @@ class TranslationService {
             throw TranslationError.factoryError(error)
         }
         
-        let request = TranslationRequest(prompt: prompt, configuration: apiConfig)
+        let request = TranslationRequest(prompt: prompt, configuration: apiConfig, model: project.selectedModel)
         let response: TranslationResponse
         do {
             response = try await llmService.translate(request: request)

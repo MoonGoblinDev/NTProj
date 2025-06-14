@@ -39,11 +39,12 @@ struct TranslationWorkspaceView: View {
     }
 
     var body: some View {
-        // FIX: Create a local bindable instance of the view model
-        // to correctly create bindings for its properties (e.g., for the .alert).
         @Bindable var bindableWorkspaceViewModel = workspaceViewModel
         
-        ZStack {
+        // FIX: Remove the problematic `@Bindable var bindableProject` line.
+        // We will unwrap the optional `project` directly inside the toolbar.
+        
+        let mainContent = ZStack {
             VStack(spacing: 0) {
                 editorOrPlaceholder
             }
@@ -52,6 +53,7 @@ struct TranslationWorkspaceView: View {
                 loadingOverlay
             }
         }
+        .navigationTitle("")
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 ProjectSelectorView(
@@ -61,24 +63,48 @@ struct TranslationWorkspaceView: View {
                 )
                 .frame(minWidth: 200, idealWidth: 250)
             }
-            ToolbarItemGroup(placement: .primaryAction) {
-                
-                Button("Translate", systemImage: "sparkles") {
-                    Task {
-                        await viewModel.streamTranslateChapter(activeChapter)
+            
+            // FIX: Safely unwrap the optional `project` before using it.
+            if let project = self.project {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Menu {
+                        ForEach(project.apiConfigurations.filter { !$0.enabledModels.isEmpty }) { config in
+                            Section(config.provider.displayName) {
+                                ForEach(config.enabledModels, id: \.self) { modelName in
+                                    Button {
+                                        // Direct modification is sufficient. SwiftUI will update the view.
+                                        project.selectedProvider = config.provider
+                                        project.selectedModel = modelName
+                                    } label: {
+                                        HStack {
+                                            Text(modelName)
+                                            if project.selectedProvider == config.provider && project.selectedModel == modelName {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "cpu")
+                            Text(project.selectedModel.isEmpty ? "Select Model" : project.selectedModel)
+                                .lineLimit(1)
+                        }
                     }
+                    .menuIndicator(.visible)
+                    .fixedSize()
+                    .disabled(project.apiConfigurations.allSatisfy { $0.enabledModels.isEmpty })
+                    
+                    Button("Translate", systemImage: "sparkles") {
+                        Task {
+                            await viewModel.streamTranslateChapter(activeChapter)
+                        }
+                    }
+                    .disabled(activeChapter == nil || activeChapter?.rawContent.isEmpty == true || viewModel?.isTranslating == true)
                 }
-                .disabled(activeChapter == nil || activeChapter?.rawContent.isEmpty == true || viewModel?.isTranslating == true)
-            }
-        }
-        .sheet(isPresented: $isCreatingProject) { CreateProjectView() }
-        .sheet(isPresented: $appContext.isSheetPresented, onDismiss: { appContext.glossaryEntryToEditID = nil }) {
-            if let entry = entryToDisplay, let project = self.project {
-                NavigationStack {
-                    GlossaryDetailView(entry: entry, project: project)
-                }
-            } else {
-                Text("Error: Could not find glossary item.").padding()
             }
         }
         .onAppear {
@@ -109,27 +135,39 @@ struct TranslationWorkspaceView: View {
                 self.entryToDisplay = foundEntry
             }
         }
-        .alert("Translation Error", isPresented: .constant(viewModel?.errorMessage != nil), actions: {
-            Button("OK", role: .cancel) { viewModel.errorMessage = nil }
-        }, message: {
-            Text(viewModel?.errorMessage ?? "An unknown error occurred.")
-        })
-        .alert(
-            "Unsaved Changes",
-            isPresented: $bindableWorkspaceViewModel.isCloseChapterAlertPresented,
-            presenting: workspaceViewModel.chapterIDToClose
-        ) { _ in
-            Button("Save Chapter") {
-                workspaceViewModel.saveAndCloseChapter()
+        
+        return mainContent
+            .sheet(isPresented: $isCreatingProject) { CreateProjectView() }
+            .sheet(isPresented: $appContext.isSheetPresented, onDismiss: { appContext.glossaryEntryToEditID = nil }) {
+                if let entry = entryToDisplay, let project = self.project {
+                    NavigationStack {
+                        GlossaryDetailView(entry: entry, project: project)
+                    }
+                } else {
+                    Text("Error: Could not find glossary item.").padding()
+                }
             }
-            Button("Discard Changes", role: .destructive) {
-                workspaceViewModel.discardAndCloseChapter()
+            .alert("Translation Error", isPresented: .constant(viewModel?.errorMessage != nil), actions: {
+                Button("OK", role: .cancel) { viewModel.errorMessage = nil }
+            }, message: {
+                Text(viewModel?.errorMessage ?? "An unknown error occurred.")
+            })
+            .alert(
+                "Unsaved Changes",
+                isPresented: $bindableWorkspaceViewModel.isCloseChapterAlertPresented,
+                presenting: workspaceViewModel.chapterIDToClose
+            ) { _ in
+                Button("Save Chapter") {
+                    workspaceViewModel.saveAndCloseChapter()
+                }
+                Button("Discard Changes", role: .destructive) {
+                    workspaceViewModel.discardAndCloseChapter()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: { chapterID in
+                let title = workspaceViewModel.fetchChapter(with: chapterID)?.title ?? "this chapter"
+                Text("Do you want to save the changes you made to \"\(title)\"?\n\nYour changes will be lost if you don't save them.")
             }
-            Button("Cancel", role: .cancel) { }
-        } message: { chapterID in
-            let title = workspaceViewModel.fetchChapter(with: chapterID)?.title ?? "this chapter"
-            Text("Do you want to save the changes you made to \"\(title)\"?\n\nYour changes will be lost if you don't save them.")
-        }
     }
     
     @ViewBuilder private var editorOrPlaceholder: some View {
@@ -218,5 +256,3 @@ struct TranslationWorkspaceView: View {
         editorState.sourceAttributedText = mutableText
     }
 }
-
-

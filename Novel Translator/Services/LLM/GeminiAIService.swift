@@ -113,7 +113,7 @@ class GoogleService: LLMServiceProtocol {
     func translate(request: TranslationRequest) async throws -> TranslationResponse {
         guard !apiKey.isEmpty else { throw GeminiError.invalidAPIKey }
         
-        let model = request.configuration.model
+        let model = request.model
         let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
         
         guard let url = URL(string: endpoint) else {
@@ -163,7 +163,7 @@ class GoogleService: LLMServiceProtocol {
                 do {
                     guard !apiKey.isEmpty else { throw GeminiError.invalidAPIKey }
                     
-                    let model = request.configuration.model
+                    let model = request.model
                     // NOTE: The endpoint path and query parameter are different for streaming
                     let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):streamGenerateContent?key=\(apiKey)&alt=sse"
                     

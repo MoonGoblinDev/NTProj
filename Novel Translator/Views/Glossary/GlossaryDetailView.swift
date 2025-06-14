@@ -27,10 +27,7 @@ struct GlossaryDetailView: View {
         !originalTerm.trimmingCharacters(in: .whitespaces).isEmpty &&
         !translation.trimmingCharacters(in: .whitespaces).isEmpty
     }
-    
-    private var navTitle: String {
-        entry == nil ? "New Glossary Entry" : "Edit Glossary Entry"
-    }
+
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,7 +81,7 @@ struct GlossaryDetailView: View {
             .padding()
         }
         .frame(minWidth: 450, idealWidth: 550, minHeight: 450)
-        .navigationTitle(navTitle)
+        .navigationTitle("Glossary Entry")
         .onAppear(perform: loadEntryData)
     }
     

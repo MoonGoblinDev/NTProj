@@ -28,7 +28,7 @@ struct TranslationEditorView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("Source: \(chapter.project?.sourceLanguage ?? "")")
                     .font(.headline)
-                    .padding([.horizontal, .top])
+                    .padding()
                 
                 TextView(
                     text: $sourceText,
@@ -42,7 +42,7 @@ struct TranslationEditorView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("Translation: \(chapter.project?.targetLanguage ?? "") (\(chapter.translationStatus.rawValue))")
                     .font(.headline)
-                    .padding([.horizontal, .top])
+                    .padding()
                 
                 TextView(
                     text: $translatedText,
@@ -54,6 +54,6 @@ struct TranslationEditorView: View {
                 .disabled(isDisabled)
             }
         }
-        .navigationTitle(chapter.title)
+        .navigationTitle("")
     }
 }

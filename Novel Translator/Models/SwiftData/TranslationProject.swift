@@ -18,6 +18,11 @@ final class TranslationProject {
     var lastModifiedDate: Date
     var projectDescription: String?
     
+    // New: Store the currently selected provider and model for translation
+    // FIX: Make the property optional to handle old data that doesn't have this field.
+    var selectedProvider: APIConfiguration.APIProvider?
+    var selectedModel: String = ""
+    
     // Relationships
     @Relationship(deleteRule: .cascade, inverse: \Chapter.project)
     var chapters: [Chapter] = []
@@ -26,7 +31,7 @@ final class TranslationProject {
     var glossaryEntries: [GlossaryEntry] = []
     
     @Relationship(deleteRule: .cascade, inverse: \APIConfiguration.project)
-    var apiConfig: APIConfiguration?
+    var apiConfigurations: [APIConfiguration] = []
     
     // Note: The summary mentions TranslationStats and ImportSettings as having a relationship,
     // but the provided model code uses a projectId. This implementation follows the model code.
@@ -40,5 +45,9 @@ final class TranslationProject {
         self.createdDate = Date()
         self.lastModifiedDate = Date()
         self.projectDescription = description
+
+        // Set a default model on creation for NEW projects.
+        self.selectedProvider = .google
+        self.selectedModel = APIConfiguration.APIProvider.google.defaultModels.first ?? "gemini-1.5-flash-latest"
     }
 }

@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		9048AF5C2DFACDB9001250A1 /* STTextView in Frameworks */ = {isa = PBXBuildFile; productRef = 9048AF5B2DFACDB9001250A1 /* STTextView */; };
+		9063AAF12DFD05C000235B60 /* STTextView in Frameworks */ = {isa = PBXBuildFile; productRef = 9063AAF02DFD05C000235B60 /* STTextView */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,7 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9048AF5C2DFACDB9001250A1 /* STTextView in Frameworks */,
+				9063AAF12DFD05C000235B60 /* STTextView in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,7 +70,7 @@
 			);
 			name = "Novel Translator";
 			packageProductDependencies = (
-				9048AF5B2DFACDB9001250A1 /* STTextView */,
+				9063AAF02DFD05C000235B60 /* STTextView */,
 			);
 			productName = "Novel Translator";
 			productReference = 908891592DF842CE000B99B4 /* Novel Translator.app */;
@@ -101,7 +101,7 @@
 			mainGroup = 908891502DF842CE000B99B4;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				9048AF5A2DFACDB9001250A1 /* XCRemoteSwiftPackageReference "STTextView" */,
+				9063AAEF2DFD05C000235B60 /* XCLocalSwiftPackageReference "../STTextView" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 9088915A2DF842CE000B99B4 /* Products */;
@@ -331,21 +331,16 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		9048AF5A2DFACDB9001250A1 /* XCRemoteSwiftPackageReference "STTextView" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/krzyzanowskim/STTextView";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.0.7;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		9063AAEF2DFD05C000235B60 /* XCLocalSwiftPackageReference "../STTextView" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../STTextView;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		9048AF5B2DFACDB9001250A1 /* STTextView */ = {
+		9063AAF02DFD05C000235B60 /* STTextView */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 9048AF5A2DFACDB9001250A1 /* XCRemoteSwiftPackageReference "STTextView" */;
 			productName = STTextView;
 		};
 /* End XCSwiftPackageProductDependency section */

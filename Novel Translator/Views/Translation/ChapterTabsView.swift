@@ -14,7 +14,7 @@ struct ChapterTabsView: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
+            HStack(spacing: 0) {
                 ForEach(workspaceViewModel.openChapterIDs, id: \.self) { chapterID in
                     if let chapter = chapter(for: chapterID) {
                         ChapterTabItem(
@@ -31,11 +31,10 @@ struct ChapterTabsView: View {
                     }
                 }
             }
-            .padding(.horizontal, 8)
         }
-        .padding(.top, 6)
+        .padding(0.5)
         .frame(height: 38)
-        .background(Material.bar)
+        .background(Color(NSColor.windowBackgroundColor))
         .overlay(alignment: .bottom) {
             Divider()
         }
@@ -59,13 +58,19 @@ fileprivate struct ChapterTabItem: View {
     let onClose: () -> Void
     
     @State private var isHovered = false
+    @State private var exitiIsHovered = false
 
     var body: some View {
         HStack(spacing: 8) {
+            Text("􁜿")
+                .font(.system(size: 13))
+                .lineLimit(1)
+                .foregroundColor(hasUnsavedChanges ? Color.unsaved : .white)
+                .padding(.leading, 15)
+            
             Text(chapter.title)
                 .font(.system(size: 13))
                 .lineLimit(1)
-                .padding(.leading, 12)
 
             closeButton
                 .padding(.trailing, 8)
@@ -74,7 +79,7 @@ fileprivate struct ChapterTabItem: View {
         .background(
             isActive ? Color.accentColor.opacity(0.2) : (isHovered ? Color.secondary.opacity(0.15) : Color.clear)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20 , style: .continuous))
         .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
         .onHover { hovering in
@@ -87,12 +92,6 @@ fileprivate struct ChapterTabItem: View {
     @ViewBuilder
     private var closeButton: some View {
         ZStack {
-            // Unsaved changes indicator (a filled circle)
-            if hasUnsavedChanges && !isHovered {
-                Circle()
-                    .fill(Color.secondary)
-                    .frame(width: 14, height: 14)
-            }
             
             // The 'x' close button, visible on hover
             Image(systemName: "xmark")
@@ -102,7 +101,13 @@ fileprivate struct ChapterTabItem: View {
                     .secondary.opacity(0.2),
                     in: Circle()
                 )
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.1)) {
+                        exitiIsHovered = hovering
+                    }
+                }
                 .opacity(isHovered ? 1 : 0)
+                .scaleEffect(exitiIsHovered ? 1.2 : 1)
         }
         .onTapGesture(perform: onClose)
     }

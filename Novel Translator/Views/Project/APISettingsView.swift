@@ -7,102 +7,119 @@ struct APISettingsView: View {
     
     @Bindable var project: TranslationProject
     
-    @State private var apiKey: String = ""
-    @State private var selectedProvider: APIConfiguration.APIProvider
-    @State private var selectedModel: String
+    @State private var selectedProvider: APIConfiguration.APIProvider = .google
     
+    var body: some View {
+        VStack(spacing: 0) {
+            NavigationSplitView {
+                List(APIConfiguration.APIProvider.allCases, selection: $selectedProvider) { provider in
+                    Text(provider.displayName).tag(provider)
+                }
+                .navigationTitle("")
+            } detail: {
+                if let config = project.apiConfigurations.first(where: { $0.provider == selectedProvider }) {
+                    ProviderSettingsDetailView(config: config, project: project)
+                } else {
+                    ContentUnavailableView("Configuration Not Found", systemImage: "xmark.circle")
+                }
+            }
+            .navigationTitle("")
+            .navigationSplitViewStyle(.balanced)
+            
+            Divider()
+            
+            HStack {
+                Spacer()
+                Button("Done") {
+                    saveAndDismiss()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+        }
+        .frame(minWidth: 600, idealWidth: 750, minHeight: 450, idealHeight: 550)
+    }
+    
+    private func saveAndDismiss() {
+        // Ensure the selected model is valid
+        if let currentConfig = project.apiConfigurations.first(where: { $0.provider == project.selectedProvider }),
+           !currentConfig.enabledModels.contains(project.selectedModel) {
+            // If the currently selected model was just disabled, pick another enabled one.
+            project.selectedModel = currentConfig.enabledModels.first ?? ""
+        }
+        
+        // Save the context
+        do {
+            try modelContext.save()
+        } catch {
+            print("Failed to save API configurations: \(error)")
+        }
+        dismiss()
+    }
+}
+
+// Detail view for a single provider's settings
+fileprivate struct ProviderSettingsDetailView: View {
+    @Bindable var config: APIConfiguration
+    @Bindable var project: TranslationProject
+    
+    @State private var apiKey: String = ""
     @State private var availableModels: [String] = []
     @State private var isLoadingModels = false
     @State private var modelLoadingError: String?
     
-    private let availableProviders: [APIConfiguration.APIProvider] = [.google]
-    
-    init(project: TranslationProject) {
-        self.project = project
-        if let config = project.apiConfig {
-            _selectedProvider = State(initialValue: config.provider)
-            _selectedModel = State(initialValue: config.model)
-        } else {
-            _selectedProvider = State(initialValue: .google)
-            _selectedModel = State(initialValue: "")
-        }
-    }
-    
     var body: some View {
-        VStack {
-            Form {
-                Section("API Provider") {
-                    Picker("Provider", selection: $selectedProvider) {
-                        ForEach(availableProviders, id: \.self) { provider in
-                            Text(provider.displayName).tag(provider)
-                        }
+        Form {
+            Section("API Key") {
+                SecureField("Stored in Keychain", text: $apiKey)
+                    .onChange(of: apiKey) { _, newValue in
+                        // Save key immediately, but only trigger model loading after a delay
+                        KeychainHelper.save(key: config.apiKeyIdentifier, stringValue: newValue)
                     }
-                    .pickerStyle(.segmented)
-                    
-                    SecureField("API Key (Stored in Keychain)", text: $apiKey)
-                    
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Picker("Model", selection: $selectedModel) {
-                                ForEach(availableModels, id: \.self) { model in
-                                    Text(model).tag(model)
-                                }
-                            }
-                            .disabled(isLoadingModels || availableModels.isEmpty)
-                            
-                            if isLoadingModels {
-                                ProgressView().scaleEffect(0.5)
-                            }
-                        }
-                        
-                        if let error = modelLoadingError {
-                            Text(error)
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
+                
+                Button("Fetch Available Models") {
+                    Task { await loadModels() }
+                }
+                .disabled(apiKey.isEmpty)
+            }
+            
+            Section("Enabled Models for Translation") {
+                if isLoadingModels {
+                    HStack {
+                        ProgressView()
+                        Text("Loading models...")
+                    }
+                } else if let error = modelLoadingError {
+                    Text(error)
+                        .foregroundColor(.red)
+                } else if availableModels.isEmpty {
+                    Text("No models available. Fetch them using your API key.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    List(availableModels, id: \.self) { modelName in
+                        Toggle(modelName, isOn: bindingFor(model: modelName))
                     }
                 }
             }
-            .formStyle(.grouped)
-            
-            Spacer()
-            
-            HStack {
-                Button("Cancel", role: .cancel) {
-                    dismiss()
-                }
-                Spacer()
-                Button("Save") {
-                    saveConfiguration()
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(selectedModel.isEmpty)
-            }
-            .padding()
         }
-        .frame(minWidth: 450, idealWidth: 500, minHeight: 300)
-        .navigationTitle("API Settings")
+        .formStyle(.grouped)
+        .navigationTitle("")
         .onAppear(perform: loadInitialData)
-        .onChange(of: apiKey) { _, _ in
-            Task { await loadModels() }
-        }
     }
     
     private func loadInitialData() {
-        if let config = project.apiConfig {
-            self.apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier) ?? ""
+        self.apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier) ?? ""
+        
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            self.availableModels = config.provider.defaultModels
+            return
         }
-        Task {
-            // For preview, we won't call the network. Just populate with dummy data.
-            #if DEBUG
-            if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
-                self.availableModels = ["gemini-1.5-pro-preview", "gemini-1.5-flash-preview"]
-                self.selectedModel = "gemini-1.5-flash-preview"
-                return
-            }
-            #endif
-            await loadModels()
+        #endif
+        
+        // Load models if key exists
+        if !apiKey.isEmpty {
+            Task { await loadModels() }
         }
     }
     
@@ -117,12 +134,13 @@ struct APISettingsView: View {
         modelLoadingError = nil
         
         do {
-            let models = try await GoogleService.fetchAvailableModels(apiKey: self.apiKey)
-            self.availableModels = models
-            if !models.contains(selectedModel) || selectedModel.isEmpty {
-                selectedModel = models.first ?? ""
+            switch config.provider {
+            case .google:
+                self.availableModels = try await GoogleService.fetchAvailableModels(apiKey: self.apiKey)
+            case .openai, .anthropic:
+                // For other providers, use the hardcoded default list for now
+                self.availableModels = config.provider.defaultModels
             }
-            
         } catch {
             self.availableModels = []
             self.modelLoadingError = error.localizedDescription
@@ -131,23 +149,23 @@ struct APISettingsView: View {
         isLoadingModels = false
     }
     
-    private func saveConfiguration() {
-        guard let config = project.apiConfig else { return }
-        
-        let status = KeychainHelper.save(key: config.apiKeyIdentifier, stringValue: apiKey)
-        if status != noErr {
-            print("Error: Failed to save API key to Keychain. Status: \(status)")
-        }
-        
-        config.provider = selectedProvider
-        config.model = selectedModel
-        project.lastModifiedDate = Date()
-        
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to save API configuration: \(error)")
-        }
+    private func bindingFor(model modelName: String) -> Binding<Bool> {
+        Binding<Bool>(
+            get: {
+                self.config.enabledModels.contains(modelName)
+            },
+            set: { isEnabled in
+                if isEnabled {
+                    if !config.enabledModels.contains(modelName) {
+                        config.enabledModels.append(modelName)
+                        config.enabledModels.sort()
+                    }
+                } else {
+                    config.enabledModels.removeAll { $0 == modelName }
+                }
+                project.lastModifiedDate = Date()
+            }
+        )
     }
 }
 
@@ -155,19 +173,31 @@ struct APISettingsView: View {
     struct Previewer: View {
         @Query private var projects: [TranslationProject]
         var body: some View {
-            NavigationStack {
-                 APISettingsView(project: projects.first!)
+            if let project = projects.first {
+                APISettingsView(project: project)
+            } else {
+                Text("Loading preview...")
             }
         }
     }
 
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
+    let modelContext = container.mainContext
     
     let project = TranslationProject(name: "My Awesome Novel", sourceLanguage: "Japanese", targetLanguage: "English")
-    let apiConfig = APIConfiguration(provider: .google, model: "gemini-1.5-flash-preview")
-    project.apiConfig = apiConfig
-    container.mainContext.insert(project)
+    
+    for provider in APIConfiguration.APIProvider.allCases {
+        let apiConfig = APIConfiguration(provider: provider)
+        apiConfig.apiKeyIdentifier = "com.noveltranslator.\(project.id.uuidString).\(provider.rawValue)"
+        if provider == .google {
+            apiConfig.enabledModels = ["gemini-1.5-flash-latest"]
+        }
+        project.apiConfigurations.append(apiConfig)
+        modelContext.insert(apiConfig)
+    }
+    project.selectedModel = "gemini-1.5-flash-latest"
+    modelContext.insert(project)
 
     return Previewer()
         .modelContainer(container)

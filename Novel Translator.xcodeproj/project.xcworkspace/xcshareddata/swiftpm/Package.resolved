@@ -1,5 +1,5 @@
 {
-  "originHash" : "e5504e968935302affe833edbbd54654f16599ad44598256cbaec3fd1e39794b",
+  "originHash" : "760baa99af9445eaba23db87d521ab4a48d3c319a513128125a683fbbf572449",
   "pins" : [
     {
       "identity" : "coretextswift",
@@ -17,15 +17,6 @@
       "state" : {
         "revision" : "ebc71aaa6137b45ad289d1faf6e7687b6b9488e9",
         "version" : "0.1.9"
-      }
-    },
-    {
-      "identity" : "sttextview",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/krzyzanowskim/STTextView",
-      "state" : {
-        "revision" : "15b36f3821090f21733eb72849aa375f0be65046",
-        "version" : "2.0.7"
       }
     }
   ],

@@ -26,28 +26,37 @@ class ProjectViewModel {
                 description: description
             )
             
-            // 2. Create default API configuration
-            // MODIFIED: Updated to new initializer. The identifier will be set properly in the settings view.
-            let apiConfig = APIConfiguration(
-                provider: .google,
-                model: APIConfiguration.APIProvider.google.defaultModels.first ?? "gemini-1.5-flash-latest"
-            )
+            // 2. Create API configurations for all providers
+            for provider in APIConfiguration.APIProvider.allCases {
+                let apiConfig = APIConfiguration(provider: provider)
+                // Create a unique keychain identifier per project, per provider
+                apiConfig.apiKeyIdentifier = "com.noveltranslator.\(newProject.id.uuidString).\(provider.rawValue)"
+                apiConfig.project = newProject
+                newProject.apiConfigurations.append(apiConfig)
+                modelContext.insert(apiConfig)
+            }
             
-            // Generate a unique identifier for the keychain based on the new project's ID
-            apiConfig.apiKeyIdentifier = "com.noveltranslator.\(newProject.id.uuidString)"
+            // 3. Set a sensible default selected model and enable it
+            let defaultProvider = APIConfiguration.APIProvider.google
+            if let defaultModel = defaultProvider.defaultModels.first {
+                newProject.selectedProvider = defaultProvider
+                newProject.selectedModel = defaultModel
+                
+                // Also enable this model by default in its configuration
+                if let googleConfig = newProject.apiConfigurations.first(where: { $0.provider == defaultProvider }) {
+                    googleConfig.enabledModels.append(defaultModel)
+                }
+            }
             
-            apiConfig.project = newProject
-            
-            // 3. Create initial statistics object
+            // 4. Create initial statistics object
             let stats = TranslationStats(projectId: newProject.id)
             
     // ... rest of the function is the same ...
-            // 4. Create default import settings
+            // 5. Create default import settings
             let importSettings = ImportSettings(projectId: newProject.id)
             
-            // 5. Insert all new objects into the context
+            // 6. Insert all new objects into the context
             modelContext.insert(newProject)
-            modelContext.insert(apiConfig)
             modelContext.insert(stats)
             modelContext.insert(importSettings)
             

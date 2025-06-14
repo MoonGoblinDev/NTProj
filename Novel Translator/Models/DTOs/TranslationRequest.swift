@@ -10,4 +10,5 @@ import Foundation
 struct TranslationRequest {
     let prompt: String
     let configuration: APIConfiguration
+    let model: String
 }

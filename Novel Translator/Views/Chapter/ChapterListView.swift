@@ -28,18 +28,24 @@ struct ChapterListView: View {
                             handleTap(on: chapter)
                         }) {
                             HStack(spacing: 8) {
-                                Circle()
-                                    .fill(workspaceViewModel.editorStates[chapter.id]?.hasUnsavedChanges ?? false ? Color.red : Color.clear)
-                                    .frame(width: 8, height: 8)
-                                
-                                Text("Ch. \(chapter.chapterNumber): \(chapter.title)")
-                                    .lineLimit(1)
+                                HStack(spacing: 0){
+                                    Text("#\(chapter.chapterNumber)   ")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text("􁜿 ")
+                                        .lineLimit(1)
+                                        .foregroundColor(workspaceViewModel.editorStates[chapter.id]?.hasUnsavedChanges ?? false ? Color.unsaved : .white)
+                                    Text(chapter.title)
+                                        .lineLimit(1)
+                                        .foregroundStyle(.primary)
+                                }
                                 Spacer()
                                 Text(chapter.translationStatus.rawValue)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                             .foregroundStyle(.primary)
+                            .contentShape(Rectangle()) // Add this line
                         }
                         .buttonStyle(.plain)
                         .listRowBackground(rowBackground(for: chapter.id))

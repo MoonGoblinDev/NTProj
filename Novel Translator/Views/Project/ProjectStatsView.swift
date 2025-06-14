@@ -52,6 +52,6 @@ struct ProjectStatsView: View {
                 Spacer()
             }
         }
-        .navigationTitle("Statistics")
+        .navigationTitle("")
     }
 }

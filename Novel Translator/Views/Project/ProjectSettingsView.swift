@@ -46,7 +46,7 @@ struct ProjectSettingsView: View {
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .padding()
-        .navigationTitle("Project Settings")
+        .navigationTitle("")
         .sheet(isPresented: $isAPISettingsPresented) {
             APISettingsView(project: project)
         }

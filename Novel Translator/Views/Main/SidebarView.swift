@@ -48,7 +48,7 @@ struct SidebarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OpaqueVisualEffect().ignoresSafeArea())
         .onChange(of: selectedProjectID) {
             selectedTab = .chapters
         }

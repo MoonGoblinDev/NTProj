@@ -19,7 +19,7 @@ struct ProjectListView: View {
             Text(project.name)
                 .tag(project.id)
         }
-        .navigationTitle("Projects")
+        .navigationTitle("")
         .toolbar {
             ToolbarItem {
                 Button(action: { isCreatingProject = true }) {
