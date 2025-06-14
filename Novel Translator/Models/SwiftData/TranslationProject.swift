@@ -22,6 +22,7 @@ final class TranslationProject {
     // FIX: Make the property optional to handle old data that doesn't have this field.
     var selectedProvider: APIConfiguration.APIProvider?
     var selectedModel: String = ""
+    var selectedPromptPresetID: UUID?
     
     // Relationships
     @Relationship(deleteRule: .cascade, inverse: \Chapter.project)
@@ -32,6 +33,9 @@ final class TranslationProject {
     
     @Relationship(deleteRule: .cascade, inverse: \APIConfiguration.project)
     var apiConfigurations: [APIConfiguration] = []
+    
+    @Relationship(deleteRule: .cascade, inverse: \PromptPreset.project)
+        var promptPresets: [PromptPreset] = []
     
     // Note: The summary mentions TranslationStats and ImportSettings as having a relationship,
     // but the provided model code uses a projectId. This implementation follows the model code.
@@ -49,5 +53,8 @@ final class TranslationProject {
         // Set a default model on creation for NEW projects.
         self.selectedProvider = .google
         self.selectedModel = APIConfiguration.APIProvider.google.defaultModels.first ?? "gemini-1.5-flash-latest"
+        
+        self.projectDescription = description
+        self.selectedPromptPresetID = nil
     }
 }

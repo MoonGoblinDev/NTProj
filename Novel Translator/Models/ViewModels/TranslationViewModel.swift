@@ -62,12 +62,16 @@ class TranslationViewModel {
         let promptBuilder = PromptBuilder()
         let glossaryMatcher = GlossaryMatcher()
         
+        // NEW: Fetch the selected preset
+        let selectedPreset = project.promptPresets.first { $0.id == project.selectedPromptPresetID }
+        
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
         let prompt = promptBuilder.buildTranslationPrompt(
             text: chapter.rawContent,
             glossaryMatches: matches,
             sourceLanguage: project.sourceLanguage,
-            targetLanguage: project.targetLanguage
+            targetLanguage: project.targetLanguage,
+            preset: selectedPreset // Pass the preset to the builder
         )
         
         do {

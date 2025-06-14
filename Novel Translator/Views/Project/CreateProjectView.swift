@@ -29,7 +29,7 @@ struct CreateProjectView: View {
                     TextField("Target Language", text: $targetLanguage)
                 }
                 
-                Section(header: Text("Description (Optional)")) {
+                Section(header: Text("Description")) {
                     TextEditor(text: $projectDescription)
                         .frame(minHeight: 100)
                         .cornerRadius(8)

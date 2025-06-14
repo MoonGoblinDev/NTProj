@@ -12,29 +12,61 @@ class PromptBuilder {
         text: String,
         glossaryMatches: [GlossaryMatch],
         sourceLanguage: String,
-        targetLanguage: String
+        targetLanguage: String,
+        preset: PromptPreset?
     ) -> String {
-        var prompt = """
-        You are an expert novel translator. Your task is to translate the following text from \(sourceLanguage) to \(targetLanguage).
-        Preserve the original tone, style, and formatting, including line breaks.
-        
-        """
+        let template = (preset?.prompt.isEmpty == false) ? preset!.prompt : PromptPreset.defaultPrompt
 
+        var glossaryBlock = ""
         if !glossaryMatches.isEmpty {
-            prompt += "CRITICAL: You MUST use the following translations for specific terms. Do not deviate from them.\n"
-            prompt += "--- GLOSSARY START ---\n"
-            for match in glossaryMatches {
-                let entry = match.entry
-                prompt += "- [\(entry.category.rawValue.capitalized)] \(entry.originalTerm) -> \(entry.translation)\n"
+            // Step 1: Get unique entries from all matches to avoid duplicates.
+            let uniqueEntries = Set(glossaryMatches.map { $0.entry })
+
+            // Step 2: Group the unique entries by their category.
+            let groupedEntries = Dictionary(grouping: uniqueEntries, by: { $0.category })
+
+            // Step 3: Build the formatted string from the grouped dictionary.
+            glossaryBlock += "CRITICAL: You MUST use the following translations for specific terms. Do not deviate from them.\n"
+            glossaryBlock += "--- GLOSSARY START ---\n"
+
+            // Sort categories by their display name for consistent, alphabetical order.
+            for category in groupedEntries.keys.sorted(by: { $0.displayName < $1.displayName }) {
+                guard let entries = groupedEntries[category], !entries.isEmpty else { continue }
+                
+                // Add the category header.
+                glossaryBlock += "[\(category.displayName)]\n"
+                
+                // Sort entries within the category alphabetically by the original term.
+                for entry in entries.sorted(by: { $0.originalTerm < $1.originalTerm }) {
+                    var line = "\(entry.originalTerm) -> \(entry.translation)"
+                    // Append context description if it exists and is not empty.
+                    if entry.contextDescription != "" {
+                        line += " | Context: \(entry.contextDescription)"
+                    }
+                    glossaryBlock += "\(line)\n"
+                }
+                // Add a blank line after each category for readability.
+                glossaryBlock += "\n"
             }
-            prompt += "--- GLOSSARY END ---\n\n"
+            
+            // Remove the final blank line and add the end marker.
+            glossaryBlock = glossaryBlock.trimmingCharacters(in: .whitespacesAndNewlines)
+            glossaryBlock += "\n--- GLOSSARY END ---\n\n"
         }
 
-        prompt += "Now, translate the following text:\n"
-        prompt += "--- TEXT TO TRANSLATE START ---\n"
-        prompt += text
-        prompt += "\n--- TEXT TO TRANSLATE END ---"
-        
-        return prompt
+        var prompt = template
+            .replacingOccurrences(of: "{{SOURCE_LANGUAGE}}", with: sourceLanguage)
+            .replacingOccurrences(of: "{{TARGET_LANGUAGE}}", with: targetLanguage)
+            .replacingOccurrences(of: "{{TEXT}}", with: text)
+
+        // Handle optional glossary placeholder
+        if template.contains("{{GLOSSARY}}") {
+            prompt = prompt.replacingOccurrences(of: "{{GLOSSARY}}", with: glossaryBlock)
+        } else if !glossaryBlock.isEmpty {
+            // If the user's template doesn't include the placeholder, prepend the glossary.
+            prompt = glossaryBlock + prompt
+        }
+
+        return prompt.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

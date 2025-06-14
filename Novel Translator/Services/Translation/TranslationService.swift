@@ -180,14 +180,17 @@ class TranslationService {
         guard let apiConfig = project.apiConfigurations.first(where: { $0.provider == project.selectedProvider }) else { throw TranslationError.apiConfigMissing }
         guard !project.selectedModel.isEmpty else { throw TranslationError.apiConfigMissing }
 
-
         let startTime = Date()
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
+        
+        // CORRECTED: Fetch the selected preset and pass it to the builder
+        let selectedPreset = project.promptPresets.first { $0.id == project.selectedPromptPresetID }
         let prompt = promptBuilder.buildTranslationPrompt(
             text: chapter.rawContent,
             glossaryMatches: matches,
             sourceLanguage: project.sourceLanguage,
-            targetLanguage: project.targetLanguage
+            targetLanguage: project.targetLanguage,
+            preset: selectedPreset
         )
 
         let llmService: LLMServiceProtocol

@@ -16,7 +16,8 @@ struct NovelTranslatorApp: App {
             TranslationVersion.self,
             APIConfiguration.self,
             TranslationStats.self,
-            ImportSettings.self
+            ImportSettings.self,
+            PromptPreset.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

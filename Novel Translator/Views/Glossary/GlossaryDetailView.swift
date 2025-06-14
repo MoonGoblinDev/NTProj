@@ -107,14 +107,14 @@ struct GlossaryDetailView: View {
             entry.originalTerm = originalTerm
             entry.translation = translation
             entry.category = category
-            entry.contextDescription = contextDescription.isEmpty ? nil : contextDescription
+            entry.contextDescription = contextDescription
             entry.aliases = finalAliases
         } else {
             let newEntry = GlossaryEntry(
                 originalTerm: originalTerm,
                 translation: translation,
                 category: category,
-                contextDescription: contextDescription.isEmpty ? nil : contextDescription,
+                contextDescription: contextDescription,
                 aliases: finalAliases
             )
             newEntry.project = project
@@ -155,27 +155,6 @@ struct GlossaryDetailView: View {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
     container.mainContext.insert(TranslationProject(name: "Sample", sourceLanguage: "A", targetLanguage: "B"))
-    
-    return Previewer()
-        .modelContainer(container)
-}
-
-#Preview("Edit Entry") {
-    struct Previewer: View {
-        @Query private var projects: [TranslationProject]
-        var body: some View {
-            NavigationStack {
-                GlossaryDetailView(entry: projects.first!.glossaryEntries.first!, project: projects.first!)
-            }
-        }
-    }
-    
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
-    let project = TranslationProject(name: "Sample", sourceLanguage: "A", targetLanguage: "B")
-    let entry = GlossaryEntry(originalTerm: "主人公", translation: "Protagonist", category: .character, aliases: ["main character"])
-    project.glossaryEntries.append(entry)
-    container.mainContext.insert(project)
     
     return Previewer()
         .modelContainer(container)

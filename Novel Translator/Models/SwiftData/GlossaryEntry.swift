@@ -14,7 +14,7 @@ final class GlossaryEntry {
     var originalTerm: String
     var translation: String
     var category: GlossaryCategory
-    var contextDescription: String?
+    var contextDescription: String
     var usageCount: Int
     var isActive: Bool
     var createdDate: Date
@@ -39,7 +39,7 @@ final class GlossaryEntry {
         }
     }
     
-    init(originalTerm: String, translation: String, category: GlossaryCategory, contextDescription: String? = nil, aliases: [String] = []) {
+    init(originalTerm: String, translation: String, category: GlossaryCategory, contextDescription: String, aliases: [String] = []) {
         self.id = UUID()
         self.originalTerm = originalTerm
         self.translation = translation

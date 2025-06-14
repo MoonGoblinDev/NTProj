@@ -16,7 +16,6 @@ class ProjectViewModel {
         self.modelContext = modelContext
     }
     
-    // createProject function remains the same...
     func createProject(name: String, sourceLang: String, targetLang: String, description: String?) {
             // 1. Create the main project object
             let newProject = TranslationProject(
@@ -51,14 +50,19 @@ class ProjectViewModel {
             // 4. Create initial statistics object
             let stats = TranslationStats(projectId: newProject.id)
             
-    // ... rest of the function is the same ...
             // 5. Create default import settings
             let importSettings = ImportSettings(projectId: newProject.id)
+
+            // 6. Create a default prompt preset
+            let defaultPreset = PromptPreset(name: "Default", prompt: PromptPreset.defaultPrompt, project: newProject)
+            newProject.promptPresets.append(defaultPreset)
+            newProject.selectedPromptPresetID = defaultPreset.id
             
-            // 6. Insert all new objects into the context
+            // 7. Insert all new objects into the context
             modelContext.insert(newProject)
             modelContext.insert(stats)
             modelContext.insert(importSettings)
+            modelContext.insert(defaultPreset)
             
             do {
                 try modelContext.save()
@@ -70,7 +74,7 @@ class ProjectViewModel {
     func deleteProject(_ project: TranslationProject) {
         let projectId = project.id
 
-        // The .cascade delete rule handles Chapters, GlossaryEntries, and APIConfiguration.
+        // The .cascade delete rule handles Chapters, GlossaryEntries, APIConfiguration, and PromptPresets.
         // We must manually delete models linked only by the projectId.
         
         // Delete associated TranslationStats

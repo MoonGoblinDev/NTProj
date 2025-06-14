@@ -69,27 +69,3 @@ struct GlossaryView: View {
         }
     }
 }
-
-#Preview {
-    struct Previewer: View {
-        @Query private var projects: [TranslationProject]
-        var body: some View {
-            GlossaryView(project: projects.first!)
-        }
-    }
-
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
-    
-    let project = TranslationProject(name: "Sample", sourceLanguage: "A", targetLanguage: "B")
-    project.glossaryEntries = [
-        GlossaryEntry(originalTerm: "Character A", translation: "Protagonist", category: .character),
-        GlossaryEntry(originalTerm: "Magic Sword", translation: "Excalibur", category: .object),
-        GlossaryEntry(originalTerm: "The Capital", translation: "King's Landing", category: .place),
-    ]
-    container.mainContext.insert(project)
-
-    return Previewer()
-        .modelContainer(container)
-        .frame(width: 350, height: 500)
-}

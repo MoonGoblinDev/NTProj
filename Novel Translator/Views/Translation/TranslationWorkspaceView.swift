@@ -11,6 +11,10 @@ struct TranslationWorkspaceView: View {
     @Binding var selectedProjectID: PersistentIdentifier?
     
     @State private var isCreatingProject = false
+    @State private var isPresetsViewPresented = false
+    @State private var isPromptPreviewPresented = false
+    @State private var promptPreviewText = ""
+    
     @State private var viewModel: TranslationViewModel!
     
     @State private var entryToDisplay: GlossaryEntry?
@@ -33,6 +37,16 @@ struct TranslationWorkspaceView: View {
         return workspaceViewModel.editorStates[activeID]
     }
     
+    private var selectedPresetName: String {
+        guard let project = self.project else { return "Default" }
+        if let presetID = project.selectedPromptPresetID,
+           let preset = project.promptPresets.first(where: { $0.id == presetID }) {
+            return preset.name
+        }
+        // If selectedPromptPresetID is nil, we use the built-in default
+        return "Default Prompt"
+    }
+    
     init(projects: [TranslationProject], selectedProjectID: Binding<PersistentIdentifier?>) {
         self.projects = projects
         _selectedProjectID = selectedProjectID
@@ -40,9 +54,6 @@ struct TranslationWorkspaceView: View {
 
     var body: some View {
         @Bindable var bindableWorkspaceViewModel = workspaceViewModel
-        
-        // FIX: Remove the problematic `@Bindable var bindableProject` line.
-        // We will unwrap the optional `project` directly inside the toolbar.
         
         let mainContent = ZStack {
             VStack(spacing: 0) {
@@ -64,15 +75,43 @@ struct TranslationWorkspaceView: View {
                 .frame(minWidth: 200, idealWidth: 250)
             }
             
-            // FIX: Safely unwrap the optional `project` before using it.
             if let project = self.project {
+                @Bindable var bindableProject = project
                 ToolbarItemGroup(placement: .primaryAction) {
+                    // --- Prompt Preset Controls ---
+                    Button {
+                        isPresetsViewPresented = true
+                    } label: {
+                        Label("Manage Prompts", systemImage: "wand.and.stars")
+                    }
+                    
+                    Menu {
+                        Picker("Prompt Preset", selection: $bindableProject.selectedPromptPresetID) {
+                            Text("Default Prompt").tag(nil as UUID?)
+                            Divider()
+                            ForEach(project.promptPresets.sorted(by: { $0.createdDate < $1.createdDate })) { preset in
+                                Text(preset.name).tag(preset.id as UUID?)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "text.quote")
+                            Text(selectedPresetName)
+                                .lineLimit(1)
+                        }
+                    }
+                    .menuIndicator(.visible)
+                    .fixedSize()
+                    
+                    Divider()
+                    
+                    // --- Model & Translation Controls ---
                     Menu {
                         ForEach(project.apiConfigurations.filter { !$0.enabledModels.isEmpty }) { config in
                             Section(config.provider.displayName) {
                                 ForEach(config.enabledModels, id: \.self) { modelName in
                                     Button {
-                                        // Direct modification is sufficient. SwiftUI will update the view.
                                         project.selectedProvider = config.provider
                                         project.selectedModel = modelName
                                     } label: {
@@ -138,6 +177,42 @@ struct TranslationWorkspaceView: View {
         
         return mainContent
             .sheet(isPresented: $isCreatingProject) { CreateProjectView() }
+            .sheet(isPresented: $isPresetsViewPresented) {
+                if let project = self.project {
+                    PromptPresetsView(project: project)
+                        .environment(\.modelContext, modelContext)
+                }
+            }
+            .sheet(isPresented: $isPromptPreviewPresented) {
+                VStack(spacing: 0) {
+                    Text("Generated Prompt Preview")
+                        .font(.title2)
+                        .padding()
+                    
+                    ScrollView {
+                        Text(promptPreviewText)
+                            .font(.body.monospaced())
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
+
+                    Divider().padding(.top)
+
+                    HStack {
+                        Spacer()
+                        Button("Done") {
+                            isPromptPreviewPresented = false
+                        }
+                        .keyboardShortcut(.cancelAction)
+                    }
+                    .padding()
+                }
+                .frame(minWidth: 600, idealWidth: 700, minHeight: 500, idealHeight: 600)
+            }
             .sheet(isPresented: $appContext.isSheetPresented, onDismiss: { appContext.glossaryEntryToEditID = nil }) {
                 if let entry = entryToDisplay, let project = self.project {
                     NavigationStack {
@@ -179,7 +254,8 @@ struct TranslationWorkspaceView: View {
                 sourceSelection: .init(get: { editorState.sourceSelection }, set: { editorState.sourceSelection = $0 }),
                 translatedSelection: .init(get: { editorState.translatedSelection }, set: { editorState.translatedSelection = $0 }),
                 chapter: chapter,
-                isDisabled: viewModel.isTranslating
+                isDisabled: viewModel.isTranslating,
+                onShowPromptPreview: { generatePromptPreview() }
             )
         } else if project != nil {
             ContentUnavailableView(
@@ -218,6 +294,30 @@ struct TranslationWorkspaceView: View {
             appContext.glossaryEntryToEditID = match.entry.id
         }
     }
+    
+    private func generatePromptPreview() {
+        guard let project = self.project, let chapter = self.activeChapter else {
+            self.promptPreviewText = "Error: Could not generate prompt. No active project or chapter."
+            self.isPromptPreviewPresented = true
+            return
+        }
+
+        let promptBuilder = PromptBuilder()
+        let glossaryMatcher = GlossaryMatcher()
+
+        let selectedPreset = project.promptPresets.first { $0.id == project.selectedPromptPresetID }
+        let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
+
+        self.promptPreviewText = promptBuilder.buildTranslationPrompt(
+            text: chapter.rawContent,
+            glossaryMatches: matches,
+            sourceLanguage: project.sourceLanguage,
+            targetLanguage: project.targetLanguage,
+            preset: selectedPreset
+        )
+
+        self.isPromptPreviewPresented = true
+    }
 
     private func updateSourceHighlights() {
         guard let project = project, let editorState = activeEditorState else {
@@ -230,7 +330,6 @@ struct TranslationWorkspaceView: View {
             return
         }
         
-        // This is a complex operation that modifies the attributed string in place.
         var mutableText = editorState.sourceAttributedText
         
         let fullNSRange = NSRange(location: 0, length: stringToMatch.utf16.count)
@@ -252,7 +351,6 @@ struct TranslationWorkspaceView: View {
             }
         }
         
-        // Assign the modified string back to the state.
         editorState.sourceAttributedText = mutableText
     }
 }
