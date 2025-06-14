@@ -1,29 +1,25 @@
-import SwiftData
 import Foundation
 
 // MARK: - TranslationError Enum
 enum TranslationError: LocalizedError {
     case projectNotFound
+    case chapterNotFound
     case apiConfigMissing
     case llmServiceError(Error)
-    case statsNotFound
     case factoryError(Error)
-    case noCurrentVersion
     
     var errorDescription: String? {
         switch self {
         case .projectNotFound:
-            return "The project for this chapter could not be found."
+            return "The project could not be found."
+        case .chapterNotFound:
+            return "The chapter could not be found in the project."
         case .apiConfigMissing:
             return "API configuration is missing for this project. Please set it up in Project Settings."
         case .llmServiceError(let underlyingError):
             return "An error occurred with the LLM service: \(underlyingError.localizedDescription)"
-        case .statsNotFound:
-            return "Could not find the statistics object for this project."
         case .factoryError(let error):
             return "Could not create LLM service: \(error.localizedDescription)"
-        case .noCurrentVersion:
-            return "Could not find a current version to save changes to."
         }
     }
 }
@@ -31,35 +27,32 @@ enum TranslationError: LocalizedError {
 // MARK: - TranslationService
 @MainActor
 class TranslationService {
-    private var modelContext: ModelContext
     private let glossaryMatcher = GlossaryMatcher()
-    private let promptBuilder = PromptBuilder()
 
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
-    }
-
-    /// This is the new primary method for saving the result of a completed stream.
-    func saveStreamingResult(
-        for chapter: Chapter,
+    /// Updates the in-memory models after a successful streaming translation.
+    func updateModelsAfterStreaming(
+        project: TranslationProject,
+        chapterID: UUID,
         fullText: String,
         prompt: String,
         modelUsed: String,
         inputTokens: Int?,
         outputTokens: Int?,
         translationTime: TimeInterval
-    ) throws {
-        // 1. Get Project
-        guard let project = chapter.project else {
-            throw TranslationError.projectNotFound
+    ) {
+        guard let chapterIndex = project.chapters.firstIndex(where: { $0.id == chapterID }) else {
+            print("Error: Could not find chapter with ID \(chapterID) to save result.")
+            return
         }
-
-        // 2. Deactivate previous "current" version
-        chapter.translationVersions.filter { $0.isCurrentVersion }.forEach { $0.isCurrentVersion = false }
         
-        // 3. Create new version
+        // 1. Deactivate previous "current" version in the chapter
+        for i in 0..<project.chapters[chapterIndex].translationVersions.count {
+            project.chapters[chapterIndex].translationVersions[i].isCurrentVersion = false
+        }
+        
+        // 2. Create new version
         let newVersion = TranslationVersion(
-            versionNumber: (chapter.translationVersions.map(\.versionNumber).max() ?? 0) + 1,
+            versionNumber: (project.chapters[chapterIndex].translationVersions.map(\.versionNumber).max() ?? 0) + 1,
             content: fullText,
             llmModel: modelUsed,
             promptUsed: prompt,
@@ -67,32 +60,31 @@ class TranslationService {
             translationTime: translationTime,
             isCurrentVersion: true
         )
-        newVersion.chapter = chapter
-        modelContext.insert(newVersion)
+        project.chapters[chapterIndex].translationVersions.append(newVersion)
         
-        // 4. Update chapter with the final text
-        chapter.translatedContent = fullText
-        chapter.lastTranslatedDate = Date()
-        chapter.translationStatus = .needsReview
+        // 3. Update chapter with the final text
+        project.chapters[chapterIndex].translatedContent = fullText
+        project.chapters[chapterIndex].lastTranslatedDate = Date()
+        project.chapters[chapterIndex].translationStatus = .needsReview
         project.lastModifiedDate = Date()
         
-        // 5. Update stats
-        try updateStatsAfterTranslation(for: chapter, inputTokens: inputTokens, outputTokens: outputTokens, translationTime: translationTime)
+        // 4. Update stats
+        updateStatsAfterTranslation(project: project, chapter: project.chapters[chapterIndex], inputTokens: inputTokens, outputTokens: outputTokens, translationTime: translationTime)
         
-        // 6. Update glossary usage
-        let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
+        // 5. Update glossary usage
+        let matches = glossaryMatcher.detectTerms(in: project.chapters[chapterIndex].rawContent, from: project.glossaryEntries)
         for match in matches {
-            match.entry.usageCount += 1
-            match.entry.lastUsedDate = Date()
+            if let entryIndex = project.glossaryEntries.firstIndex(where: { $0.id == match.entry.id }) {
+                project.glossaryEntries[entryIndex].usageCount += 1
+                project.glossaryEntries[entryIndex].lastUsedDate = Date()
+            }
         }
-        
-        // 7. Save all changes to the database
-        try modelContext.save()
     }
     
-    /// **NEW:** A dedicated function for saving manual edits from the UI.
-    func saveManualChanges(for chapter: Chapter, rawContent: String, translatedContent: String) throws {
+    /// Updates the in-memory chapter with manual edits from the UI.
+    func updateChapterWithManualChanges(project: TranslationProject, chapterIndex: Int, rawContent: String, translatedContent: String) {
         var hasChanges = false
+        var chapter = project.chapters[chapterIndex]
         
         // Update raw content if it changed
         if chapter.rawContent != rawContent {
@@ -105,120 +97,51 @@ class TranslationService {
             chapter.translatedContent = translatedContent
             
             // Also update the content of the "current" translation version
-            if let currentVersion = chapter.translationVersions.first(where: { $0.isCurrentVersion }) {
-                currentVersion.content = translatedContent
+            if let currentVersionIndex = chapter.translationVersions.firstIndex(where: { $0.isCurrentVersion }) {
+                chapter.translationVersions[currentVersionIndex].content = translatedContent
             } else if !translatedContent.isEmpty {
                 // If there's no version history yet, create the first one.
                 let newVersion = TranslationVersion(versionNumber: 1, content: translatedContent, llmModel: "Manual Edit")
-                newVersion.chapter = chapter
-                modelContext.insert(newVersion)
+                chapter.translationVersions.append(newVersion)
             }
             hasChanges = true
         }
 
-        // Only save if there were actual changes
         if hasChanges {
-            chapter.project?.lastModifiedDate = Date()
-            print("Saving manual changes...")
-            try modelContext.save()
-            print("Manual changes saved successfully.")
+            project.chapters[chapterIndex] = chapter
+            project.lastModifiedDate = Date()
         }
     }
     
-    /// **MODIFIED:** Helper method to consolidate the logic for updating project statistics.
-    /// This is now robust and will create a stats object if one doesn't exist.
-    private func updateStatsAfterTranslation(for chapter: Chapter, inputTokens: Int?, outputTokens: Int?, translationTime: TimeInterval) throws {
-        guard let project = chapter.project else { return }
-        let projectId = project.id
-        let descriptor = FetchDescriptor<TranslationStats>(predicate: #Predicate { $0.projectId == projectId })
-        
-        // Try to fetch stats, but if it fails, create a new one.
-        let stats: TranslationStats
-        if let existingStats = try modelContext.fetch(descriptor).first {
-            stats = existingStats
-        } else {
-            print("Warning: TranslationStats not found for project \(project.name). Creating a new one.")
-            let newStats = TranslationStats(projectId: projectId)
-            modelContext.insert(newStats)
-            stats = newStats
-        }
-        
+    private func updateStatsAfterTranslation(project: TranslationProject, chapter: Chapter, inputTokens: Int?, outputTokens: Int?, translationTime: TimeInterval) {
         // Update general stats
         let tokensUsed = (inputTokens ?? 0) + (outputTokens ?? 0)
-        stats.totalTokensUsed += tokensUsed
+        project.stats.totalTokensUsed += tokensUsed
         
         // Update total chapter/word counts if new chapters were imported
         let currentTotalChapters = project.chapters.count
-        if stats.totalChapters != currentTotalChapters {
-            stats.totalChapters = currentTotalChapters
-            stats.totalWords = project.chapters.reduce(0) { $0 + $1.wordCount }
+        if project.stats.totalChapters != currentTotalChapters {
+            project.stats.totalChapters = currentTotalChapters
+            project.stats.totalWords = project.chapters.reduce(0) { $0 + $1.wordCount }
         }
         
-        let previouslyCompleted = Double(stats.completedChapters)
+        let previouslyCompleted = Double(project.stats.completedChapters)
         
         // Increment completion counts only if this is the first translation for this chapter.
         if chapter.translationVersions.count == 1 {
-            stats.completedChapters += 1
-            stats.translatedWords += chapter.wordCount
+            project.stats.completedChapters += 1
+            project.stats.translatedWords += chapter.wordCount
         }
         
         // Recalculate average translation time
-        if stats.completedChapters > 0 {
-            let totalCompletedTime = (stats.averageTranslationTime * previouslyCompleted) + translationTime
-            stats.averageTranslationTime = totalCompletedTime / Double(stats.completedChapters)
+        if project.stats.completedChapters > 0 {
+            let totalCompletedTime = (project.stats.averageTranslationTime * previouslyCompleted) + translationTime
+            project.stats.averageTranslationTime = totalCompletedTime / Double(project.stats.completedChapters)
         }
         
-        stats.lastUpdated = Date()
+        project.stats.lastUpdated = Date()
         
         // TODO: Add real cost calculation logic based on model
-        stats.estimatedCost += Double(tokensUsed) * 0.000002 // Placeholder cost
-    }
-    
-    // NOTE: This original non-streaming method is kept for potential future use.
-    func translateChapter(_ chapter: Chapter) async throws {
-        guard let project = chapter.project else { throw TranslationError.projectNotFound }
-        guard let apiConfig = project.apiConfigurations.first(where: { $0.provider == project.selectedProvider }) else { throw TranslationError.apiConfigMissing }
-        guard !project.selectedModel.isEmpty else { throw TranslationError.apiConfigMissing }
-
-        let startTime = Date()
-        let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
-        
-        // CORRECTED: Fetch the selected preset and pass it to the builder
-        let selectedPreset = project.promptPresets.first { $0.id == project.selectedPromptPresetID }
-        let prompt = promptBuilder.buildTranslationPrompt(
-            text: chapter.rawContent,
-            glossaryMatches: matches,
-            sourceLanguage: project.sourceLanguage,
-            targetLanguage: project.targetLanguage,
-            preset: selectedPreset
-        )
-
-        let llmService: LLMServiceProtocol
-        do {
-            llmService = try LLMServiceFactory.create(provider: apiConfig.provider, config: apiConfig)
-        } catch {
-            throw TranslationError.factoryError(error)
-        }
-        
-        let request = TranslationRequest(prompt: prompt, configuration: apiConfig, model: project.selectedModel)
-        let response: TranslationResponse
-        do {
-            response = try await llmService.translate(request: request)
-        } catch {
-            throw TranslationError.llmServiceError(error)
-        }
-        
-        let translationTime = Date().timeIntervalSince(startTime)
-
-        // Call the save method with the final assembled data
-        try saveStreamingResult(
-            for: chapter,
-            fullText: response.translatedText,
-            prompt: prompt,
-            modelUsed: response.modelUsed,
-            inputTokens: response.inputTokens,
-            outputTokens: response.outputTokens,
-            translationTime: translationTime
-        )
+        project.stats.estimatedCost += Double(tokensUsed) * 0.000002 // Placeholder cost
     }
 }

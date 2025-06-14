@@ -1,71 +1,62 @@
 import SwiftUI
-import SwiftData
 
 @main
 struct NovelTranslatorApp: App {
     @StateObject private var appContext = AppContext()
-    @State private var workspaceViewModel: WorkspaceViewModel
-
-    let sharedModelContainer: ModelContainer
-    
-    init() {
-        let schema = Schema([
-            TranslationProject.self,
-            Chapter.self,
-            GlossaryEntry.self,
-            TranslationVersion.self,
-            APIConfiguration.self,
-            TranslationStats.self,
-            ImportSettings.self,
-            PromptPreset.self
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            self.sharedModelContainer = container
-            self._workspaceViewModel = State(initialValue: WorkspaceViewModel(modelContext: container.mainContext))
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }
+    @StateObject private var projectManager = ProjectManager()
+    @StateObject private var workspaceViewModel = WorkspaceViewModel()
 
     var body: some Scene {
         Window("Novel Translator", id: "main") {
             ContentView()
                 .environmentObject(appContext)
-                .environment(workspaceViewModel)
+                .environmentObject(projectManager)
+                .environmentObject(workspaceViewModel) // FIX: Use environmentObject for ObservableObject
+                .onChange(of: projectManager.project) { _, newProject in // FIX: Equatable conformance on TranslationProject handles this
+                    // When the project manager loads a new project, tell the workspace about it.
+                    workspaceViewModel.setCurrentProject(newProject)
+                }
         }
-        .modelContainer(sharedModelContainer)
         .handlesExternalEvents(matching: Set(arrayLiteral: "noveltranslator"))
         .commands {
             // Replaces the standard "Save" item in the File menu
             CommandGroup(replacing: .saveItem) {
-                Button("Save") {
-                    saveActiveChapter()
+                Button("Save Project") {
+                    saveProject()
                 }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!canSave())
+            }
+            
+            CommandGroup(after: .newItem) {
+                Button("Open Project...") {
+                    projectManager.openProject()
+                }
+                .keyboardShortcut("o", modifiers: .command)
+                
+                Button("Close Project") {
+                    // TODO: Add an unsaved changes check here
+                    projectManager.closeProject()
+                }
+                .disabled(projectManager.project == nil)
             }
         }
     }
     
     // MARK: - Menu Command Helpers
     
-    /// Checks if the active chapter has unsaved changes.
+    /// The save option is enabled if the workspace has any unsaved editor changes.
     private func canSave() -> Bool {
-        guard let activeID = workspaceViewModel.activeChapterID else {
-            return false
-        }
-        // The save option is enabled only if there's an active chapter
-        // and its editor state shows unsaved changes.
-        return workspaceViewModel.editorStates[activeID]?.hasUnsavedChanges ?? false
+        workspaceViewModel.hasUnsavedEditorChanges
     }
     
     /// Triggers the save action on the workspace view model.
-    private func saveActiveChapter() {
+    private func saveProject() {
         do {
-            try workspaceViewModel.saveChapter(id: workspaceViewModel.activeChapterID)
+            // First, ensure any unsaved text in editors is written to the project model
+            try workspaceViewModel.commitAllUnsavedChanges()
+            // Then, tell the project manager to write the project file to disk
+            projectManager.saveProject()
         } catch {
             // Error handling from a menu item is limited. We'll log it to the console.
             print("Failed to save from menu command: \(error.localizedDescription)")

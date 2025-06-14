@@ -1,12 +1,4 @@
-//
-//  TranslationViewModel.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 11/06/25.
-//
-
 import SwiftUI
-import SwiftData
 
 @Observable
 @MainActor
@@ -18,11 +10,9 @@ class TranslationViewModel {
     var translationText: String = ""
     
     private var translationService: TranslationService
-    private var modelContext: ModelContext
     
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
-        self.translationService = TranslationService(modelContext: modelContext)
+    init() {
+        self.translationService = TranslationService()
     }
     
     // Sets the initial text in the editor when a chapter is selected.
@@ -32,12 +22,7 @@ class TranslationViewModel {
         self.translationText = chapter?.translatedContent ?? ""
     }
     
-    func streamTranslateChapter(_ chapter: Chapter?) async {
-        guard let chapter = chapter, let project = chapter.project else {
-            errorMessage = "Chapter or project configuration is missing."
-            return
-        }
-        
+    func streamTranslateChapter(project: TranslationProject, chapter: Chapter) async {
         // FIX: Safely unwrap the optional provider, defaulting to .google if it's nil.
         let activeProvider = project.selectedProvider ?? .google
         
@@ -88,10 +73,11 @@ class TranslationViewModel {
                 }
             }
             
-            // Once the stream is finished, save the final result.
+            // Once the stream is finished, save the final result to the in-memory model.
             let translationTime = Date().timeIntervalSince(startTime)
-            try translationService.saveStreamingResult(
-                for: chapter,
+            translationService.updateModelsAfterStreaming(
+                project: project,
+                chapterID: chapter.id,
                 fullText: translationText,
                 prompt: prompt,
                 modelUsed: project.selectedModel,

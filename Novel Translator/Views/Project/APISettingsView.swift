@@ -1,11 +1,9 @@
 import SwiftUI
-import SwiftData
 
 struct APISettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
     
-    @Bindable var project: TranslationProject
+    @ObservedObject var project: TranslationProject
     
     @State private var selectedProvider: APIConfiguration.APIProvider = .google
     
@@ -17,8 +15,11 @@ struct APISettingsView: View {
                 }
                 .navigationTitle("")
             } detail: {
-                if let config = project.apiConfigurations.first(where: { $0.provider == selectedProvider }) {
-                    ProviderSettingsDetailView(config: config, project: project)
+                if let configIndex = project.apiConfigurations.firstIndex(where: { $0.provider == selectedProvider }) {
+                    ProviderSettingsDetailView(
+                        config: $project.apiConfigurations[configIndex],
+                        project: project
+                    )
                 } else {
                     ContentUnavailableView("Configuration Not Found", systemImage: "xmark.circle")
                 }
@@ -38,6 +39,9 @@ struct APISettingsView: View {
             .padding()
         }
         .frame(minWidth: 600, idealWidth: 750, minHeight: 450, idealHeight: 550)
+        .onAppear {
+            selectedProvider = project.selectedProvider ?? .google
+        }
     }
     
     private func saveAndDismiss() {
@@ -48,20 +52,14 @@ struct APISettingsView: View {
             project.selectedModel = currentConfig.enabledModels.first ?? ""
         }
         
-        // Save the context
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to save API configurations: \(error)")
-        }
         dismiss()
     }
 }
 
 // Detail view for a single provider's settings
 fileprivate struct ProviderSettingsDetailView: View {
-    @Bindable var config: APIConfiguration
-    @Bindable var project: TranslationProject
+    @Binding var config: APIConfiguration
+    @ObservedObject var project: TranslationProject
     
     @State private var apiKey: String = ""
     @State private var availableModels: [String] = []
@@ -167,38 +165,4 @@ fileprivate struct ProviderSettingsDetailView: View {
             }
         )
     }
-}
-
-#Preview {
-    struct Previewer: View {
-        @Query private var projects: [TranslationProject]
-        var body: some View {
-            if let project = projects.first {
-                APISettingsView(project: project)
-            } else {
-                Text("Loading preview...")
-            }
-        }
-    }
-
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
-    let modelContext = container.mainContext
-    
-    let project = TranslationProject(name: "My Awesome Novel", sourceLanguage: "Japanese", targetLanguage: "English")
-    
-    for provider in APIConfiguration.APIProvider.allCases {
-        let apiConfig = APIConfiguration(provider: provider)
-        apiConfig.apiKeyIdentifier = "com.noveltranslator.\(project.id.uuidString).\(provider.rawValue)"
-        if provider == .google {
-            apiConfig.enabledModels = ["gemini-1.5-flash-latest"]
-        }
-        project.apiConfigurations.append(apiConfig)
-        modelContext.insert(apiConfig)
-    }
-    project.selectedModel = "gemini-1.5-flash-latest"
-    modelContext.insert(project)
-
-    return Previewer()
-        .modelContainer(container)
 }

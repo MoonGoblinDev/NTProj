@@ -1,22 +1,11 @@
-//
-//  ImportSettings.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 10/06/25.
-//
-
-import SwiftData
 import Foundation
 
-@Model
-final class ImportSettings {
-    @Attribute(.unique) var id: UUID
-    var projectId: UUID
-    var fileFormat: FileFormat
-    var chapterSeparator: String
-    var autoDetectChapters: Bool
-    var preserveFormatting: Bool
-    var encoding: String
+struct ImportSettings: Codable, Identifiable {
+    var id: UUID = UUID()
+    var chapterSeparator: String = "\n\nChapter "
+    var autoDetectChapters: Bool = true
+    var preserveFormatting: Bool = false
+    var encoding: String = "UTF-8"
     
     enum FileFormat: String, CaseIterable, Codable {
         case txt = "txt"
@@ -28,13 +17,6 @@ final class ImportSettings {
         }
     }
     
-    init(projectId: UUID) {
-        self.id = UUID()
-        self.projectId = projectId
-        self.fileFormat = .txt
-        self.chapterSeparator = "\n\nChapter "
-        self.autoDetectChapters = true
-        self.preserveFormatting = false
-        self.encoding = "UTF-8"
-    }
+    // Note: projectId and fileFormat were removed as they are less relevant in a single-file project model.
+    // This can be expanded later if needed.
 }

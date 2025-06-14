@@ -1,10 +1,8 @@
 import SwiftUI
-import SwiftData
 
 struct PromptPresetsView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Bindable var project: TranslationProject
+    @ObservedObject var project: TranslationProject
 
     @State private var selectedPresetID: UUID?
 
@@ -12,18 +10,18 @@ struct PromptPresetsView: View {
         project.promptPresets.sorted { $0.createdDate < $1.createdDate }
     }
     
-    private var selectedPreset: PromptPreset? {
-        guard let selectedPresetID else { return nil }
-        return project.promptPresets.first { $0.id == selectedPresetID }
+    private var selectedPresetBinding: Binding<PromptPreset>? {
+        guard let selectedPresetID = selectedPresetID,
+              let index = project.promptPresets.firstIndex(where: { $0.id == selectedPresetID }) else {
+            return nil
+        }
+        return $project.promptPresets[index]
     }
 
     var body: some View {
-        // Match the structure of APISettingsView: A root VStack.
         VStack(spacing: 0) {
             NavigationSplitView {
-                // The sidebar column.
                 VStack(spacing: 0) {
-                    //Spacer().frame(height: 36)
                     List(selection: $selectedPresetID) {
                         ForEach(sortedPresets) { preset in
                             Text(preset.name)
@@ -33,10 +31,8 @@ struct PromptPresetsView: View {
                     }
                     .listStyle(.sidebar)
                     
-                    
                     Divider()
                     
-                    // The action bar for the sidebar.
                     HStack {
                         Spacer()
                         Button(action: addPreset) {
@@ -44,34 +40,18 @@ struct PromptPresetsView: View {
                         }
                         .buttonStyle(.plain)
                         .padding(8)
-                        
                     }
                     .frame(height: 36)
                     .background(.background.secondary)
                 }
                 .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 400)
-
             } detail: {
-                if let preset = selectedPreset {
-                    //Spacer().frame(height: 25)
-                    PromptPresetDetailView(preset: preset)
+                if let presetBinding = selectedPresetBinding {
+                    PromptPresetDetailView(preset: presetBinding, project: project)
                 } else {
                     ContentUnavailableView("No Preset Selected", systemImage: "wand.and.stars", description: Text("Select a preset from the list or create a new one."))
                 }
             }
-            
-            Divider()
-            
-            // Manual bottom bar, just like in APISettingsView.
-//            HStack {
-//                Spacer()
-//                Button("Done") {
-//                    dismiss()
-//                }
-//                .buttonStyle(.borderedProminent)
-//                .keyboardShortcut(.defaultAction)
-//            }
-//            .padding()
         }
         .frame(minWidth: 700, idealWidth: 800, minHeight: 500)
         .onAppear {
@@ -79,35 +59,33 @@ struct PromptPresetsView: View {
                 selectedPresetID = sortedPresets.first?.id
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }
+            }
+        }
     }
     
     private func addPreset() {
-        let newPreset = PromptPreset(name: "New Preset", prompt: PromptPreset.defaultPrompt, project: project)
+        let newPreset = PromptPreset(name: "New Preset", prompt: PromptPreset.defaultPrompt)
         project.promptPresets.append(newPreset)
-        
-        // Select the new preset automatically
         selectedPresetID = newPreset.id
     }
     
     private func deletePresets(at offsets: IndexSet) {
         for index in offsets {
             let presetToDelete = sortedPresets[index]
-            // If the deleted preset was the one globally selected for the project, clear it.
             if project.selectedPromptPresetID == presetToDelete.id {
                 project.selectedPromptPresetID = nil
             }
-            modelContext.delete(presetToDelete)
+            project.promptPresets.removeAll(where: { $0.id == presetToDelete.id })
         }
-        try? modelContext.save()
     }
 }
 
 fileprivate struct PromptPresetDetailView: View {
-    @Bindable var preset: PromptPreset
-    
-    private var project: TranslationProject? {
-        preset.project
-    }
+    @Binding var preset: PromptPreset
+    let project: TranslationProject
     
     var body: some View {
         Form {
@@ -125,14 +103,7 @@ fileprivate struct PromptPresetDetailView: View {
                 
                 HStack {
                     Spacer()
-                    if let project {
-                        TokenCounterView(text: preset.prompt, project: project, autoCount: true)
-                    } else {
-                        // Fallback for the rare case project is not linked
-                        Text("Estimated tokens: ~\(preset.prompt.estimateTokens())")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    TokenCounterView(text: preset.prompt, project: project, autoCount: true)
                 }
             }
             

@@ -1,12 +1,4 @@
-//
-//  TokenCounterViewModel.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 15/06/25.
-//
-
 import SwiftUI
-import SwiftData
 
 @MainActor
 @Observable
@@ -19,14 +11,12 @@ class TokenCounterViewModel {
     
     // MARK: - Private Properties
     private var project: TranslationProject
-    private var modelContext: ModelContext
     private let autoCount: Bool
     private var textToCount: String = ""
     private var debounceTask: Task<Void, Never>?
     
-    init(project: TranslationProject, modelContext: ModelContext, autoCount: Bool) {
+    init(project: TranslationProject, autoCount: Bool) {
         self.project = project
-        self.modelContext = modelContext
         self.autoCount = autoCount
     }
 

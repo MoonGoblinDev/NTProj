@@ -1,9 +1,7 @@
 import SwiftUI
-import SwiftData
 
 struct GlossaryView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Bindable var project: TranslationProject
+    @ObservedObject var project: TranslationProject
 
     @State private var entryToEdit: GlossaryEntry?
     
@@ -53,19 +51,15 @@ struct GlossaryView: View {
             }
         }
         .sheet(item: $entryToEdit) { entry in
-            GlossaryDetailView(entry: entry, project: project)
+            // Find the index of the entry to create a binding to it.
+            if let index = project.glossaryEntries.firstIndex(where: { $0.id == entry.id }) {
+                GlossaryDetailView(entry: $project.glossaryEntries[index], project: project, isCreating: false)
+            }
         }
     }
 
     private func delete(at offsets: IndexSet) {
-        for index in offsets {
-            let entryToDelete = sortedEntries[index]
-            modelContext.delete(entryToDelete)
-        }
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to delete glossary entry: \(error)")
-        }
+        let idsToDelete = offsets.map { sortedEntries[$0].id }
+        project.glossaryEntries.removeAll { idsToDelete.contains($0.id) }
     }
 }

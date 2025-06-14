@@ -1,16 +1,8 @@
-//
-//  ChapterTabsView.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 13/06/25.
-//
-
 import SwiftUI
-import SwiftData
 
 struct ChapterTabsView: View {
-    @Bindable var workspaceViewModel: WorkspaceViewModel
-    let projects: [TranslationProject]
+    @ObservedObject var workspaceViewModel: WorkspaceViewModel // FIX: Use @ObservedObject for ObservableObject
+    let project: TranslationProject
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -40,13 +32,8 @@ struct ChapterTabsView: View {
         }
     }
     
-    private func chapter(for id: PersistentIdentifier) -> Chapter? {
-        for project in projects {
-            if let chapter = project.chapters.first(where: { $0.id == id }) {
-                return chapter
-            }
-        }
-        return nil
+    private func chapter(for id: UUID) -> Chapter? {
+        return project.chapters.first(where: { $0.id == id })
     }
 }
 
@@ -65,7 +52,7 @@ fileprivate struct ChapterTabItem: View {
             Text("􁜿")
                 .font(.system(size: 13))
                 .lineLimit(1)
-                .foregroundColor(hasUnsavedChanges ? Color.unsaved : .white)
+                .foregroundColor(hasUnsavedChanges ? Color.accentColor : .primary)
                 .padding(.leading, 15)
             
             Text(chapter.title)

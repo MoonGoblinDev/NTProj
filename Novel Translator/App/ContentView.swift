@@ -1,39 +1,27 @@
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
     // Access the shared state object from the environment.
     @EnvironmentObject private var appContext: AppContext
-    @Environment(WorkspaceViewModel.self) private var workspaceViewModel
-    
-    @State private var selectedProjectID: PersistentIdentifier?
-    // REMOVED: @State private var selectedChapterID: PersistentIdentifier?
-
-    @Query(sort: \TranslationProject.lastModifiedDate, order: .reverse) private var projects: [TranslationProject]
+    @EnvironmentObject private var projectManager: ProjectManager
+    @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel
     
     var body: some View {
-        NavigationSplitView {
-            SidebarView(
-                selectedProjectID: $selectedProjectID,
-                projects: projects
-            )
-            .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 600)
+        Group {
+            if let project = projectManager.project {
+                NavigationSplitView {
+                    // FIX: Pass the single active project to the SidebarView.
+                    SidebarView(project: project)
+                    .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 600)
 
-        } detail: {
-            TranslationWorkspaceView(
-                projects: projects,
-                selectedProjectID: $selectedProjectID
-            )
-        }
-        .onAppear {
-            if selectedProjectID == nil {
-                selectedProjectID = projects.first?.id
+                } detail: {
+                    // FIX: Pass the single active project to the TranslationWorkspaceView.
+                    TranslationWorkspaceView(project: project)
+                }
+            } else {
+                WelcomeView()
             }
         }
-        .onChange(of: selectedProjectID) {
-            workspaceViewModel.closeAllChapters()
-        }
-        // The .onOpenURL now has a much simpler job.
         .onOpenURL { url in
             guard url.scheme == "noveltranslator", url.host == "glossary" else {
                 return

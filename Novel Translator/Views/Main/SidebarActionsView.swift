@@ -1,19 +1,13 @@
-//
-//  SidebarActionsView.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 10/06/25.
-//
-
 import SwiftUI
 
 struct SidebarActionsView: View {
     @Binding var selectedTab: SidebarTab
-    let project: TranslationProject // To pass to sheets
+    @ObservedObject var project: TranslationProject // To pass to sheets
     
     // State for presenting sheets
     @State private var isImporterPresented = false
     @State private var isAddGlossaryPresented = false
+    @State private var newGlossaryEntry = GlossaryEntry(originalTerm: "", translation: "", category: .character, contextDescription: "")
     
     var body: some View {
         HStack {
@@ -28,6 +22,8 @@ struct SidebarActionsView: View {
                 }
             case .glossary:
                 Button {
+                    // Reset the new entry object before presenting the sheet
+                    newGlossaryEntry = GlossaryEntry(originalTerm: "", translation: "", category: .character, contextDescription: "")
                     isAddGlossaryPresented = true
                 } label: {
                     Label("Add Entry", systemImage: "plus")
@@ -43,8 +39,8 @@ struct SidebarActionsView: View {
             ImportChapterView(project: project)
         }
         .sheet(isPresented: $isAddGlossaryPresented) {
-            // Present the detail view for CREATING a new entry (entry is nil)
-            GlossaryDetailView(entry: nil, project: project)
+            // Pass the project object and a binding to the new entry struct
+            GlossaryDetailView(entry: $newGlossaryEntry, project: project, isCreating: true)
         }
     }
 }

@@ -1,16 +1,12 @@
 import SwiftUI
-import SwiftData
-import STTextViewSwiftUI
 
 struct TranslationWorkspaceView: View {
     @EnvironmentObject private var appContext: AppContext
-    @Environment(\.modelContext) private var modelContext
-    @Environment(WorkspaceViewModel.self) private var workspaceViewModel
+    @EnvironmentObject private var projectManager: ProjectManager
+    @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel
     
-    let projects: [TranslationProject]
-    @Binding var selectedProjectID: PersistentIdentifier?
+    @ObservedObject var project: TranslationProject
     
-    @State private var isCreatingProject = false
     @State private var isPresetsViewPresented = false
     @State private var isPromptPreviewPresented = false
     @State private var promptPreviewText = ""
@@ -21,11 +17,6 @@ struct TranslationWorkspaceView: View {
     @State private var glossaryMatches: [GlossaryMatch] = []
     
     private let glossaryMatcher = GlossaryMatcher()
-    
-    private var project: TranslationProject? {
-        guard let selectedProjectID else { return nil }
-        return projects.first { $0.id == selectedProjectID }
-    }
     
     private var activeChapter: Chapter? {
         guard let activeID = workspaceViewModel.activeChapterID else { return nil }
@@ -38,23 +29,14 @@ struct TranslationWorkspaceView: View {
     }
     
     private var selectedPresetName: String {
-        guard let project = self.project else { return "Default" }
         if let presetID = project.selectedPromptPresetID,
            let preset = project.promptPresets.first(where: { $0.id == presetID }) {
             return preset.name
         }
-        // If selectedPromptPresetID is nil, we use the built-in default
         return "Default Prompt"
-    }
-    
-    init(projects: [TranslationProject], selectedProjectID: Binding<PersistentIdentifier?>) {
-        self.projects = projects
-        _selectedProjectID = selectedProjectID
     }
 
     var body: some View {
-        @Bindable var bindableWorkspaceViewModel = workspaceViewModel
-        
         let mainContent = ZStack {
             VStack(spacing: 0) {
                 editorOrPlaceholder
@@ -67,86 +49,81 @@ struct TranslationWorkspaceView: View {
         .navigationTitle("")
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
-                ProjectSelectorView(
-                    projects: projects,
-                    selectedProjectID: $selectedProjectID,
-                    onAddProject: { isCreatingProject = true }
-                )
-                .frame(minWidth: 200, idealWidth: 250)
+                ProjectSelectorView()
+                    .frame(minWidth: 200, idealWidth: 250)
             }
             
-            if let project = self.project {
-                @Bindable var bindableProject = project
-                ToolbarItemGroup(placement: .primaryAction) {
-                    // --- Prompt Preset Controls ---
-                    Button {
-                        isPresetsViewPresented = true
-                    } label: {
-                        Label("Manage Prompts", systemImage: "text.quote")
-                    }
-                    
-                    Menu {
-                        Picker("Prompt Preset", selection: $bindableProject.selectedPromptPresetID) {
-                            Text("Default Prompt").tag(nil as UUID?)
-                            Divider()
-                            ForEach(project.promptPresets.sorted(by: { $0.createdDate < $1.createdDate })) { preset in
-                                Text(preset.name).tag(preset.id as UUID?)
-                            }
-                        }
-                        .pickerStyle(.inline)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(selectedPresetName)
-                                .lineLimit(1)
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    isPresetsViewPresented = true
+                } label: {
+                    Label("Manage Prompts", systemImage: "text.quote")
+                }
+                
+                Menu {
+                    Picker("Prompt Preset", selection: $project.selectedPromptPresetID) {
+                        Text("Default Prompt").tag(nil as UUID?)
+                        Divider()
+                        ForEach(project.promptPresets.sorted(by: { $0.createdDate < $1.createdDate })) { preset in
+                            Text(preset.name).tag(preset.id as UUID?)
                         }
                     }
-                    .menuIndicator(.visible)
-                    .fixedSize()
-                    
-                    Divider()
-                    
-                    // --- Model & Translation Controls ---
-                    Menu {
-                        ForEach(project.apiConfigurations.filter { !$0.enabledModels.isEmpty }) { config in
-                            Section(config.provider.displayName) {
-                                ForEach(config.enabledModels, id: \.self) { modelName in
-                                    Button {
-                                        project.selectedProvider = config.provider
-                                        project.selectedModel = modelName
-                                    } label: {
-                                        HStack {
-                                            Text(modelName)
-                                            if project.selectedProvider == config.provider && project.selectedModel == modelName {
-                                                Spacer()
-                                                Image(systemName: "checkmark")
-                                            }
+                    .pickerStyle(.inline)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(selectedPresetName)
+                            .lineLimit(1)
+                    }
+                }
+                .menuIndicator(.visible)
+                .fixedSize()
+                
+                Divider()
+                
+                Menu {
+                    ForEach(project.apiConfigurations.filter { !$0.enabledModels.isEmpty }) { config in
+                        Section(config.provider.displayName) {
+                            ForEach(config.enabledModels, id: \.self) { modelName in
+                                Button {
+                                    project.selectedProvider = config.provider
+                                    project.selectedModel = modelName
+                                } label: {
+                                    HStack {
+                                        Text(modelName)
+                                        if project.selectedProvider == config.provider && project.selectedModel == modelName {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
                                         }
                                     }
                                 }
                             }
                         }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "cpu")
-                            Text(project.selectedModel.isEmpty ? "Select Model" : project.selectedModel)
-                                .lineLimit(1)
-                        }
                     }
-                    .menuIndicator(.visible)
-                    .fixedSize()
-                    .disabled(project.apiConfigurations.allSatisfy { $0.enabledModels.isEmpty })
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "cpu")
+                        Text(project.selectedModel.isEmpty ? "Select Model" : project.selectedModel)
+                            .lineLimit(1)
+                    }
                 }
+                .menuIndicator(.visible)
+                .fixedSize()
+                .disabled(project.apiConfigurations.allSatisfy { $0.enabledModels.isEmpty })
             }
         }
         .onAppear {
             if viewModel == nil {
-                viewModel = TranslationViewModel(modelContext: modelContext)
+                viewModel = TranslationViewModel()
             }
+            updateSourceHighlights()
         }
         .onChange(of: viewModel?.translationText) { _, newText in
             if let text = newText, let state = activeEditorState {
                 state.updateTranslation(newText: text)
             }
+        }
+        .onChange(of: activeChapter?.id) {
+            updateSourceHighlights()
         }
         .onChange(of: activeEditorState?.sourceAttributedText) { oldValue, newValue in
             guard let oldVal = oldValue, let newVal = newValue else { return }
@@ -162,59 +139,54 @@ struct TranslationWorkspaceView: View {
                 entryToDisplay = nil
                 return
             }
-            if let foundEntry = project?.glossaryEntries.first(where: { $0.id == newID }) {
+            if let foundEntry = project.glossaryEntries.first(where: { $0.id == newID }) {
                 self.entryToDisplay = foundEntry
             }
         }
         
         return mainContent
-            .sheet(isPresented: $isCreatingProject) { CreateProjectView() }
             .sheet(isPresented: $isPresetsViewPresented) {
-                if let project = self.project {
-                    PromptPresetsView(project: project)
-                        .environment(\.modelContext, modelContext)
-                }
+                PromptPresetsView(project: project)
             }
             .sheet(isPresented: $isPromptPreviewPresented) {
-                if let project {
-                    VStack(spacing: 0) {
-                        HStack {
-                            Text("Generated Prompt Preview")
-                                .font(.title2)
-                            Spacer()
-                            TokenCounterView(text: promptPreviewText, project: project, autoCount: true)
-                        }
-                        .padding()
-                        
-                        ScrollView {
-                            Text(promptPreviewText)
-                                .font(.body.monospaced())
-                                .padding()
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .textSelection(.enabled)
-                        }
-                        .background(Color(NSColor.textBackgroundColor))
-                        .cornerRadius(8)
-                        .padding(.horizontal)
-
-                        Divider().padding(.top)
-
-                        HStack {
-                            Spacer()
-                            Button("Done") {
-                                isPromptPreviewPresented = false
-                            }
-                            .keyboardShortcut(.cancelAction)
-                        }
-                        .padding()
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Generated Prompt Preview")
+                            .font(.title2)
+                        Spacer()
+                        TokenCounterView(text: promptPreviewText, project: project, autoCount: true)
                     }
-                    .frame(minWidth: 600, idealWidth: 700, minHeight: 500, idealHeight: 600)
+                    .padding()
+                    
+                    ScrollView {
+                        Text(promptPreviewText)
+                            .font(.body.monospaced())
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
+
+                    Divider().padding(.top)
+
+                    HStack {
+                        Spacer()
+                        Button("Done") {
+                            isPromptPreviewPresented = false
+                        }
+                        .keyboardShortcut(.cancelAction)
+                    }
+                    .padding()
                 }
+                .frame(minWidth: 600, idealWidth: 700, minHeight: 500, idealHeight: 600)
             }
             .sheet(isPresented: $appContext.isSheetPresented, onDismiss: { appContext.glossaryEntryToEditID = nil }) {
-                if let entry = entryToDisplay, let project = self.project {
+                if let entry = entryToDisplay,
+                   let index = project.glossaryEntries.firstIndex(where: { $0.id == entry.id }) {
                     NavigationStack {
-                        GlossaryDetailView(entry: entry, project: project)
+                        GlossaryDetailView(entry: $project.glossaryEntries[index], project: project, isCreating: false)
                     }
                 } else {
                     Text("Error: Could not find glossary item.").padding()
@@ -227,7 +199,7 @@ struct TranslationWorkspaceView: View {
             })
             .alert(
                 "Unsaved Changes",
-                isPresented: $bindableWorkspaceViewModel.isCloseChapterAlertPresented,
+                isPresented: $workspaceViewModel.isCloseChapterAlertPresented,
                 presenting: workspaceViewModel.chapterIDToClose
             ) { _ in
                 Button("Save Chapter") {
@@ -245,7 +217,7 @@ struct TranslationWorkspaceView: View {
     
     @ViewBuilder private var editorOrPlaceholder: some View {
         if let chapter = activeChapter, let editorState = activeEditorState {
-            ChapterTabsView(workspaceViewModel: workspaceViewModel, projects: projects)
+            ChapterTabsView(workspaceViewModel: workspaceViewModel, project: project)
             ZStack{
                 TranslationEditorView(
                     sourceText: .init(get: { editorState.sourceAttributedText }, set: { editorState.sourceAttributedText = $0 }),
@@ -253,6 +225,7 @@ struct TranslationWorkspaceView: View {
                     sourceSelection: .init(get: { editorState.sourceSelection }, set: { editorState.sourceSelection = $0 }),
                     translatedSelection: .init(get: { editorState.translatedSelection }, set: { editorState.translatedSelection = $0 }),
                     chapter: chapter,
+                    project: project, // FIX: Pass the project down
                     isDisabled: viewModel.isTranslating
                 )
                 VStack{
@@ -264,42 +237,25 @@ struct TranslationWorkspaceView: View {
                         }
                         .help("Show the final prompt that will be sent to the AI")
                         .disabled(chapter.rawContent.isEmpty)
-                        .onHover { isHovering in
-                            if isHovering && !chapter.rawContent.isEmpty {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
                         
                         Button("Translate", systemImage: "sparkles") {
                             Task {
-                                await viewModel.streamTranslateChapter(activeChapter)
+                                await viewModel.streamTranslateChapter(project: project, chapter: chapter)
                             }
                         }
-                        .disabled(activeChapter == nil || activeChapter?.rawContent.isEmpty == true || viewModel?.isTranslating == true)
-                        .onHover { isHovering in
-                            let isDisabled = activeChapter == nil || activeChapter?.rawContent.isEmpty == true || viewModel?.isTranslating == true
-                            if isHovering && !isDisabled {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(activeChapter == nil || chapter.rawContent.isEmpty == true || viewModel?.isTranslating == true)
                     }
-                    .frame(height: 10)
                     .padding()
                 }
             }
             
-        } else if project != nil {
+        } else {
             ContentUnavailableView(
                 "No Chapter Selected",
                 systemImage: "text.book.closed",
                 description: Text("Select a chapter from the list in the sidebar.")
             )
-        } else {
-            WelcomeView()
         }
     }
     
@@ -312,16 +268,6 @@ struct TranslationWorkspaceView: View {
             .padding()
             .transition(.opacity.animation(.easeInOut))
     }
-    
-    private func saveChanges() {
-        Task {
-            do {
-                try workspaceViewModel.saveChapter(id: workspaceViewModel.activeChapterID)
-            } catch {
-                viewModel.errorMessage = "Failed to save changes: \(error.localizedDescription)"
-            }
-        }
-    }
 
     private func handleSelectionChange(_ selection: NSRange?) {
         guard let selection, selection.length == 0, let state = activeEditorState else { return }
@@ -331,8 +277,8 @@ struct TranslationWorkspaceView: View {
     }
     
     private func generatePromptPreview() {
-        guard let project = self.project, let chapter = self.activeChapter else {
-            self.promptPreviewText = "Error: Could not generate prompt. No active project or chapter."
+        guard let chapter = self.activeChapter else {
+            self.promptPreviewText = "Error: Could not generate prompt. No active chapter."
             self.isPromptPreviewPresented = true
             return
         }
@@ -355,7 +301,7 @@ struct TranslationWorkspaceView: View {
     }
 
     private func updateSourceHighlights() {
-        guard let project = project, let editorState = activeEditorState else {
+        guard let editorState = activeEditorState else {
             self.glossaryMatches = []
             return
         }

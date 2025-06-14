@@ -1,10 +1,8 @@
 import SwiftUI
-import SwiftData
 
 struct ChapterListView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(WorkspaceViewModel.self) private var workspaceViewModel
-    @Bindable var project: TranslationProject
+    @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel // FIX: Use EnvironmentObject
+    @ObservedObject var project: TranslationProject
     
     @State private var isImporterPresented = false
     
@@ -34,7 +32,7 @@ struct ChapterListView: View {
                                         .foregroundStyle(.secondary)
                                     Text("􁜿 ")
                                         .lineLimit(1)
-                                        .foregroundColor(workspaceViewModel.editorStates[chapter.id]?.hasUnsavedChanges ?? false ? Color.unsaved : .white)
+                                        .foregroundColor(workspaceViewModel.editorStates[chapter.id]?.hasUnsavedChanges ?? false ? Color.accentColor : .primary)
                                     Text(chapter.title)
                                         .lineLimit(1)
                                         .foregroundStyle(.primary)
@@ -45,7 +43,7 @@ struct ChapterListView: View {
                                     .foregroundStyle(.secondary)
                             }
                             .foregroundStyle(.primary)
-                            .contentShape(Rectangle()) // Add this line
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .listRowBackground(rowBackground(for: chapter.id))
@@ -58,7 +56,7 @@ struct ChapterListView: View {
         }
     }
     
-    private func rowBackground(for chapterID: PersistentIdentifier) -> some View {
+    private func rowBackground(for chapterID: UUID) -> some View {
         if workspaceViewModel.activeChapterID == chapterID {
             return Color.accentColor.opacity(0.25)
         } else if workspaceViewModel.openChapterIDs.contains(chapterID) {
@@ -69,30 +67,15 @@ struct ChapterListView: View {
     }
     
     private func handleTap(on chapter: Chapter) {
-        workspaceViewModel.openChapter(id: chapter.persistentModelID)
+        workspaceViewModel.openChapter(id: chapter.id)
     }
     
     private func deleteChapters(at offsets: IndexSet) {
-        for index in offsets {
-            let chapterToDelete = sortedChapters[index]
-            workspaceViewModel.closeChapter(id: chapterToDelete.persistentModelID)
-            modelContext.delete(chapterToDelete)
-        }
+        let chapterIDsToDelete = offsets.map { sortedChapters[$0].id }
         
-        do {
-            try modelContext.save()
-        } catch {
-            print("Failed to delete chapter: \(error.localizedDescription)")
+        for id in chapterIDsToDelete {
+            workspaceViewModel.closeChapter(id: id)
+            project.chapters.removeAll { $0.id == id }
         }
     }
-}
-
-#Preview("With Chapters") {
-    // ... Previews would need to be updated to provide WorkspaceViewModel ...
-    // For brevity, previews are omitted from this change.
-    Text("Chapter List Preview")
-}
-
-#Preview("Empty State") {
-    Text("Chapter List Preview")
 }

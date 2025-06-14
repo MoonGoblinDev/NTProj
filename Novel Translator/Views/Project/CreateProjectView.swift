@@ -1,14 +1,7 @@
-//
-//  CreateProjectView.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 10/06/25.
-//
-
 import SwiftUI
 
 struct CreateProjectView: View {
-    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var projectManager: ProjectManager
     @Environment(\.dismiss) private var dismiss
     
     @State private var projectName: String = ""
@@ -47,7 +40,13 @@ struct CreateProjectView: View {
                 Spacer()
                 
                 Button("Create Project") {
-                    createProject()
+                    // The project manager will handle the file dialog and saving
+                    projectManager.createProject(
+                        name: projectName,
+                        sourceLanguage: sourceLanguage,
+                        targetLanguage: targetLanguage,
+                        description: projectDescription.isEmpty ? nil : projectDescription
+                    )
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
@@ -59,19 +58,4 @@ struct CreateProjectView: View {
         .frame(minWidth: 400, idealWidth: 500, minHeight: 400)
         .navigationTitle("New Translation Project")
     }
-    
-    private func createProject() {
-        let viewModel = ProjectViewModel(modelContext: modelContext)
-        viewModel.createProject(
-            name: projectName,
-            sourceLang: sourceLanguage,
-            targetLang: targetLanguage,
-            description: projectDescription.isEmpty ? nil : projectDescription
-        )
-    }
-}
-
-#Preview {
-    CreateProjectView()
-        .modelContainer(for: TranslationProject.self, inMemory: true)
 }

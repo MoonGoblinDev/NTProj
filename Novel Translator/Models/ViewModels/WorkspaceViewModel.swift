@@ -1,24 +1,33 @@
 import SwiftUI
-import SwiftData
+import Combine
 
 @MainActor
-@Observable
-class WorkspaceViewModel {
-    var openChapterIDs: [PersistentIdentifier] = []
-    var activeChapterID: PersistentIdentifier?
-    var editorStates: [PersistentIdentifier: ChapterEditorState] = [:]
+class WorkspaceViewModel: ObservableObject {
+    @Published var openChapterIDs: [UUID] = []
+    @Published var activeChapterID: UUID?
+    @Published var editorStates: [UUID: ChapterEditorState] = [:]
 
     // State for managing the "unsaved changes" alert
-    var chapterIDToClose: PersistentIdentifier?
-    var isCloseChapterAlertPresented: Bool = false
+    @Published var chapterIDToClose: UUID?
+    @Published var isCloseChapterAlertPresented: Bool = false
     
-    private var modelContext: ModelContext
+    // The source of truth for all project data. It's weak to avoid retain cycles.
+    // It's not @Published itself, but we observe it manually.
+    private(set) weak var project: TranslationProject?
     
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
+    // A computed property that checks if any open chapter has unsaved changes.
+    // This is the primary driver for enabling the "Save" menu item.
+    var hasUnsavedEditorChanges: Bool {
+        editorStates.values.contains { $0.hasUnsavedChanges }
+    }
+    
+    func setCurrentProject(_ project: TranslationProject?) {
+        self.project = project
+        // When project changes, close everything.
+        closeAllChapters()
     }
 
-    func openChapter(id: PersistentIdentifier) {
+    func openChapter(id: UUID) {
         if !openChapterIDs.contains(id) {
             if let chapter = fetchChapter(with: id) {
                 openChapterIDs.append(id)
@@ -28,7 +37,7 @@ class WorkspaceViewModel {
         activeChapterID = id
     }
 
-    func closeChapter(id: PersistentIdentifier) {
+    func closeChapter(id: UUID) {
         // If the chapter has unsaved changes, trigger the confirmation alert.
         if let state = editorStates[id], state.hasUnsavedChanges {
             self.chapterIDToClose = id
@@ -43,17 +52,13 @@ class WorkspaceViewModel {
     func saveAndCloseChapter() {
         guard let id = chapterIDToClose else { return }
         
-        Task {
-            do {
-                try saveChapter(id: id)
-                // If save is successful, proceed with closing.
-                forceCloseChapter(id: id)
-            } catch {
-                print("Failed to save chapter before closing: \(error)")
-                // In case of error, just dismiss the alert and leave the chapter open.
-                isCloseChapterAlertPresented = false
-                chapterIDToClose = nil
-            }
+        do {
+            try updateChapterFromState(id: id)
+            forceCloseChapter(id: id)
+        } catch {
+            print("Failed to save chapter before closing: \(error)")
+            isCloseChapterAlertPresented = false
+            chapterIDToClose = nil
         }
     }
     
@@ -64,7 +69,7 @@ class WorkspaceViewModel {
     }
     
     /// The core logic to close a chapter, now separated for re-use.
-    private func forceCloseChapter(id: PersistentIdentifier) {
+    private func forceCloseChapter(id: UUID) {
         editorStates.removeValue(forKey: id)
         openChapterIDs.removeAll { $0 == id }
 
@@ -72,15 +77,16 @@ class WorkspaceViewModel {
             activeChapterID = openChapterIDs.last
         }
         
-        // Reset alert state
         isCloseChapterAlertPresented = false
         chapterIDToClose = nil
     }
 
-    func saveChapter(id: PersistentIdentifier?) throws {
+    /// Updates the in-memory project model with the content from a specific editor state.
+    func updateChapterFromState(id: UUID?) throws {
+        guard let project = self.project else { return }
         guard let chapterID = id,
               let state = editorStates[chapterID],
-              let chapter = fetchChapter(with: chapterID) else { return }
+              let chapterIndex = project.chapters.firstIndex(where: { $0.id == chapterID }) else { return }
 
         if !state.hasUnsavedChanges {
             return
@@ -89,32 +95,33 @@ class WorkspaceViewModel {
         let rawContent = String(state.sourceAttributedText.characters)
         let translatedContent = String(state.translatedAttributedText.characters)
         
-        let service = TranslationService(modelContext: modelContext)
-        try service.saveManualChanges(
-            for: chapter,
+        let service = TranslationService()
+        service.updateChapterWithManualChanges(
+            project: project,
+            chapterIndex: chapterIndex,
             rawContent: rawContent,
             translatedContent: translatedContent
         )
 
-        // After saving, the baseline for "unsaved" has changed.
-        // We replace the state object with a new one to reset the `hasUnsavedChanges` flag.
         if let refreshedChapter = fetchChapter(with: chapterID) {
             editorStates[chapterID] = ChapterEditorState(chapter: refreshedChapter)
         }
     }
     
+    /// A central method called before saving the project file to commit all pending editor changes.
+    func commitAllUnsavedChanges() throws {
+        for id in editorStates.keys {
+            try updateChapterFromState(id: id)
+        }
+    }
+    
     func closeAllChapters() {
-        // A simple implementation that discards all changes.
-        // A more robust app would check for any unsaved changes here.
         openChapterIDs.removeAll()
         activeChapterID = nil
         editorStates.removeAll()
     }
 
-    /// **FIXED:** Fetches a chapter directly from the model context using its persistent ID.
-    /// This method is now accessible by the View layer for displaying alert messages.
-    func fetchChapter(with id: PersistentIdentifier) -> Chapter? {
-        let descriptor = FetchDescriptor<Chapter>(predicate: #Predicate { $0.persistentModelID == id })
-        return try? self.modelContext.fetch(descriptor).first
+    func fetchChapter(with id: UUID) -> Chapter? {
+        return project?.chapters.first(where: { $0.id == id })
     }
 }

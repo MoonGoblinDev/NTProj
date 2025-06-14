@@ -1,16 +1,8 @@
-//
-//  ChapterEditorState.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 12/06/25.
-//
-
 import SwiftUI
-import SwiftData
 
 @Observable
 class ChapterEditorState {
-    let chapterID: PersistentIdentifier
+    let chapterID: UUID
     private let initialRawContent: String
     private let initialTranslatedContent: String
 
@@ -28,7 +20,7 @@ class ChapterEditorState {
     }
 
     init(chapter: Chapter) {
-        self.chapterID = chapter.persistentModelID
+        self.chapterID = chapter.id
         self.initialRawContent = chapter.rawContent
         self.initialTranslatedContent = chapter.translatedContent ?? ""
 

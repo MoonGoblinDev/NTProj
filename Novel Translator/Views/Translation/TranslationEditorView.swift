@@ -12,7 +12,9 @@ struct TranslationEditorView: View {
     @Binding var sourceSelection: NSRange?
     @Binding var translatedSelection: NSRange?
     
+    // Models
     let chapter: Chapter
+    let project: TranslationProject // Add project
     let isDisabled: Bool
     
     // The options are a nested type of the SwiftUI wrapper view.
@@ -27,12 +29,12 @@ struct TranslationEditorView: View {
             // --- Left Panel: Source Text ---
             VStack(alignment: .leading, spacing: 5) {
                 HStack{
-                    Text("Source: \(chapter.project?.sourceLanguage ?? "")")
+                    // FIX: Use the passed-in project object
+                    Text("Source: \(project.sourceLanguage)")
                         .font(.headline)
                     Spacer()
-                    if let project = chapter.project {
-                         TokenCounterView(text: String(sourceText.characters), project: project, autoCount: true)
-                    }
+                    // FIX: Pass the project object to the counter
+                    TokenCounterView(text: String(sourceText.characters), project: project, autoCount: true)
                 }
                 .frame(height: 10)
                 .padding()
@@ -48,12 +50,12 @@ struct TranslationEditorView: View {
             // --- Right Panel: Translated Text ---
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text("Translation: \(chapter.project?.targetLanguage ?? "")")
+                    // FIX: Use the passed-in project object
+                    Text("Translation: \(project.targetLanguage)")
                         .font(.headline)
                     Spacer()
-                    if let project = chapter.project {
-                         TokenCounterView(text: String(translatedText.characters), project: project, autoCount: false)
-                    }
+                    // FIX: Pass the project object to the counter
+                    TokenCounterView(text: String(translatedText.characters), project: project, autoCount: false)
                 }
                 .frame(height: 10)
                 .padding()

@@ -1,14 +1,6 @@
-//
-//  ImportChapterView.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 10/06/25.
-//
 import SwiftUI
-import SwiftData
 
 struct ImportChapterView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
     let project: TranslationProject
@@ -17,7 +9,7 @@ struct ImportChapterView: View {
     
     init(project: TranslationProject) {
         self.project = project
-        _viewModel = State(initialValue: ImportViewModel(project: project, modelContext: .init(try! ModelContainer(for: TranslationProject.self))))
+        _viewModel = State(initialValue: ImportViewModel(project: project))
     }
     
     var body: some View {
@@ -80,30 +72,5 @@ struct ImportChapterView: View {
         }
         .padding(30)
         .frame(minWidth: 450, idealWidth: 500, minHeight: 350)
-        .onAppear {
-            self.viewModel = ImportViewModel(project: project, modelContext: modelContext)
-        }
     }
-}
-
-#Preview {
-    // Use a Query to get the project from the container
-    struct Previewer: View {
-        @Query private var projects: [TranslationProject]
-        
-        var body: some View {
-            if let project = projects.first {
-                ImportChapterView(project: project)
-            } else {
-                Text("No project found for preview.")
-            }
-        }
-    }
-    
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: TranslationProject.self, configurations: config)
-    container.mainContext.insert(TranslationProject(name: "Sample Project", sourceLanguage: "JP", targetLanguage: "EN"))
-    
-    return Previewer()
-        .modelContainer(container)
 }

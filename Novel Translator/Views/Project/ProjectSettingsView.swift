@@ -1,22 +1,13 @@
-//
-//  ProjectSettingsView.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 10/06/25.
-//
-
 import SwiftUI
-import SwiftData
 
 struct ProjectSettingsView: View {
-    @Bindable var project: TranslationProject
+    @ObservedObject var project: TranslationProject
     @State private var isAPISettingsPresented = false
 
     var body: some View {
         Form {
             Section("Project Information") {
                 TextField("Name", text: $project.name)
-                    .onChange(of: project.name) { _, _ in project.lastModifiedDate = Date() }
                 
                 TextField("Source Language", text: $project.sourceLanguage)
                 TextField("Target Language", text: $project.targetLanguage)
@@ -32,15 +23,19 @@ struct ProjectSettingsView: View {
             }
             
             Section("API Configuration") {
-                // MODIFIED: Use a button to present a sheet
                 Button("Manage API Keys & Models") {
                     isAPISettingsPresented = true
                 }
             }
             
             Section("Import Settings") {
-                // This can remain a NavigationLink for now
-                NavigationLink("Configure Import Rules", destination: ImportSettingsView(project: project))
+                // In a future update, this could be a sheet too.
+                // For now, it edits the project object directly.
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Auto-Detect Chapters", isOn: $project.importSettings.autoDetectChapters)
+                    TextField("Chapter Separator", text: $project.importSettings.chapterSeparator)
+                        .disabled(!project.importSettings.autoDetectChapters)
+                }
             }
         }
         .formStyle(.grouped)
@@ -51,10 +46,4 @@ struct ProjectSettingsView: View {
             APISettingsView(project: project)
         }
     }
-}
-
-// Keep the placeholder view for ImportSettingsView
-struct ImportSettingsView: View {
-    @Bindable var project: TranslationProject
-    var body: some View { Text("Import Settings for \(project.name)") }
 }

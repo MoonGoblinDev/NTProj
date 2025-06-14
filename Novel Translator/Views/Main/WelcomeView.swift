@@ -1,20 +1,31 @@
-//
-//  WelcomeView.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 10/06/25.
-//
-
 import SwiftUI
 
 struct WelcomeView: View {
+    @EnvironmentObject var projectManager: ProjectManager
+    @State private var isCreatingProject = false
+    
     var body: some View {
         ContentUnavailableView {
             Label("Welcome to Novel Translator", systemImage: "book.and.globe")
                 .font(.largeTitle)
         } description: {
-            Text("Create a new project to begin translating your novels with the power of AI.\n\nClick the '+' button in the sidebar to get started.")
+            Text("Create a new project or open an existing one to begin.")
                 .multilineTextAlignment(.center)
+                .padding(.bottom)
+            
+            HStack(spacing: 12) {
+                Button("Create New Project...") {
+                    isCreatingProject = true
+                }
+                .buttonStyle(.borderedProminent)
+                
+                Button("Open Project...") {
+                    projectManager.openProject()
+                }
+            }
+        }
+        .sheet(isPresented: $isCreatingProject) {
+            CreateProjectView()
         }
     }
 }

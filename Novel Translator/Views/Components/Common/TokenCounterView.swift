@@ -1,18 +1,10 @@
-//
-//  TokenCounterView.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 15/06/25.
-
 import SwiftUI
-import SwiftData
 
 struct TokenCounterView: View {
     let text: String
     let project: TranslationProject
     let autoCount: Bool
 
-    @Environment(\.modelContext) private var modelContext
     @State private var viewModel: TokenCounterViewModel
     
     @State private var isHovering = false
@@ -21,7 +13,7 @@ struct TokenCounterView: View {
         self.text = text
         self.project = project
         self.autoCount = autoCount
-        _viewModel = State(initialValue: TokenCounterViewModel(project: project, modelContext: .init(try! ModelContainer(for: TranslationProject.self)), autoCount: autoCount))
+        _viewModel = State(initialValue: TokenCounterViewModel(project: project, autoCount: autoCount))
     }
 
     var body: some View {
@@ -38,7 +30,6 @@ struct TokenCounterView: View {
         .font(.caption)
         .foregroundStyle(.secondary)
         .onAppear {
-            self.viewModel = TokenCounterViewModel(project: project, modelContext: modelContext, autoCount: autoCount)
             viewModel.updateText(text)
         }
         .onChange(of: text) { _, newText in
