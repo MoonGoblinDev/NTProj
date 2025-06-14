@@ -7,6 +7,7 @@
 
 import SwiftData
 import Foundation
+import SwiftUI
 
 @Model
 final class APIConfiguration {
@@ -43,6 +44,22 @@ final class APIConfiguration {
             case .anthropic: return ["claude-3-5-sonnet-20240620", "claude-3-haiku-20240307"]
             // Provide a default for project creation, even though it's fetched dynamically later.
             case .google: return ["gemini-1.5-flash-latest"]
+            }
+        }
+
+        var logoName: String {
+            switch self {
+            case .google: "g.circle.fill"
+            case .openai: "brain.head.profile"
+            case .anthropic: "a.circle.fill"
+            }
+        }
+
+        var logoColor: Color {
+            switch self {
+            case .google: .blue
+            case .openai: .green
+            case .anthropic: .orange
             }
         }
     }

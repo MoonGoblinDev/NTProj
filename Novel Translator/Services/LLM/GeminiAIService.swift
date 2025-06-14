@@ -49,6 +49,11 @@ struct ModelInfo: Codable, Identifiable {
     let supportedGenerationMethods: [String]
 }
 
+// MARK: - Codable Structs for Token Counting (/countTokens)
+private struct CountTokensResponsePayload: Codable {
+    let totalTokens: Int
+}
+
 
 // MARK: - Custom Errors
 enum GeminiError: LocalizedError {
@@ -58,6 +63,7 @@ enum GeminiError: LocalizedError {
     case invalidURL
     case responseDecodingFailed(Error)
     case modelFetchFailed(String)
+    case tokenCountFailed(String)
     
     var errorDescription: String? {
         switch self {
@@ -67,6 +73,7 @@ enum GeminiError: LocalizedError {
         case .invalidURL: "Could not create a valid URL for the Gemini API endpoint."
         case .responseDecodingFailed(let error): "Failed to decode the API response: \(error.localizedDescription)"
         case .modelFetchFailed(let message): "Failed to fetch model list: \(message)"
+        case .tokenCountFailed(let message): "Failed to count tokens: \(message)"
         }
     }
 }
@@ -104,6 +111,37 @@ class GoogleService: LLMServiceProtocol {
                 .sorted()
             
             return filteredModels
+        } catch {
+            throw GeminiError.responseDecodingFailed(error)
+        }
+    }
+
+    // MARK: - Token Counting
+    func countTokens(text: String, model: String) async throws -> Int {
+        guard !apiKey.isEmpty else { throw GeminiError.invalidAPIKey }
+        
+        let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):countTokens?key=\(apiKey)"
+        
+        guard let url = URL(string: endpoint) else { throw GeminiError.invalidURL }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // The payload for counting is the same as for generation
+        let requestPayload = GeminiRequestPayload(contents: [.init(parts: [.init(text: text)])])
+        urlRequest.httpBody = try JSONEncoder().encode(requestPayload)
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "No error details"
+            throw GeminiError.tokenCountFailed("Status Code: \((response as? HTTPURLResponse)?.statusCode ?? 0). Body: \(errorBody)")
+        }
+        
+        do {
+            let decodedResponse = try JSONDecoder().decode(CountTokensResponsePayload.self, from: data)
+            return decodedResponse.totalTokens
         } catch {
             throw GeminiError.responseDecodingFailed(error)
         }

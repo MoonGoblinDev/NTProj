@@ -105,6 +105,10 @@ struct PromptPresetsView: View {
 fileprivate struct PromptPresetDetailView: View {
     @Bindable var preset: PromptPreset
     
+    private var project: TranslationProject? {
+        preset.project
+    }
+    
     var body: some View {
         Form {
             Section {
@@ -118,6 +122,18 @@ fileprivate struct PromptPresetDetailView: View {
                     .scrollContentBackground(.hidden)
                     .background(Color(NSColor.textBackgroundColor))
                     .cornerRadius(8)
+                
+                HStack {
+                    Spacer()
+                    if let project {
+                        TokenCounterView(text: preset.prompt, project: project, autoCount: true)
+                    } else {
+                        // Fallback for the rare case project is not linked
+                        Text("Estimated tokens: ~\(preset.prompt.estimateTokens())")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
             
             Section("Available Placeholders") {

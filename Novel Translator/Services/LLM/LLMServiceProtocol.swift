@@ -13,6 +13,9 @@ protocol LLMServiceProtocol {
     
     // The new streaming method.
     func streamTranslate(request: TranslationRequest) -> AsyncThrowingStream<StreamingTranslationChunk, Error>
+    
+    // Method to get token count from the provider's API.
+    func countTokens(text: String, model: String) async throws -> Int
 }
 
 // Default implementation to make the new method optional for older services.
@@ -21,5 +24,9 @@ extension LLMServiceProtocol {
         return AsyncThrowingStream { continuation in
             continuation.finish(throwing: LLMFactoryError.serviceNotImplemented("Streaming for this provider"))
         }
+    }
+
+    func countTokens(text: String, model: String) async throws -> Int {
+        throw LLMFactoryError.serviceNotImplemented("Token counting for this provider")
     }
 }

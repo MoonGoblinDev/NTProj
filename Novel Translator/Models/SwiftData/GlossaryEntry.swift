@@ -7,6 +7,7 @@
 
 import SwiftData
 import Foundation
+import SwiftUI
 
 @Model
 final class GlossaryEntry {
@@ -36,6 +37,19 @@ final class GlossaryEntry {
         
         var displayName: String {
             self.rawValue.capitalized
+        }
+        
+        var highlightColor: Color {
+            switch self {
+            case .character: return .glossaryCharacter
+            case .place: return .glossaryPlace
+            case .event: return .glossaryEvent
+            case .object: return .glossaryObject
+            case .concept: return .glossaryConcept
+            case .organization: return .glossaryOrganization
+            case .technique: return .gold
+            case .other: return .glossaryOther
+            }
         }
     }
     

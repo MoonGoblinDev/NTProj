@@ -176,34 +176,40 @@ struct TranslationWorkspaceView: View {
                 }
             }
             .sheet(isPresented: $isPromptPreviewPresented) {
-                VStack(spacing: 0) {
-                    Text("Generated Prompt Preview")
-                        .font(.title2)
-                        .padding()
-                    
-                    ScrollView {
-                        Text(promptPreviewText)
-                            .font(.body.monospaced())
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                    }
-                    .background(Color(NSColor.textBackgroundColor))
-                    .cornerRadius(8)
-                    .padding(.horizontal)
-
-                    Divider().padding(.top)
-
-                    HStack {
-                        Spacer()
-                        Button("Done") {
-                            isPromptPreviewPresented = false
+                if let project {
+                    VStack(spacing: 0) {
+                        HStack {
+                            Text("Generated Prompt Preview")
+                                .font(.title2)
+                            Spacer()
+                            TokenCounterView(text: promptPreviewText, project: project, autoCount: true)
                         }
-                        .keyboardShortcut(.cancelAction)
+                        .padding()
+                        
+                        ScrollView {
+                            Text(promptPreviewText)
+                                .font(.body.monospaced())
+                                .padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                        }
+                        .background(Color(NSColor.textBackgroundColor))
+                        .cornerRadius(8)
+                        .padding(.horizontal)
+
+                        Divider().padding(.top)
+
+                        HStack {
+                            Spacer()
+                            Button("Done") {
+                                isPromptPreviewPresented = false
+                            }
+                            .keyboardShortcut(.cancelAction)
+                        }
+                        .padding()
                     }
-                    .padding()
+                    .frame(minWidth: 600, idealWidth: 700, minHeight: 500, idealHeight: 600)
                 }
-                .frame(minWidth: 600, idealWidth: 700, minHeight: 500, idealHeight: 600)
             }
             .sheet(isPresented: $appContext.isSheetPresented, onDismiss: { appContext.glossaryEntryToEditID = nil }) {
                 if let entry = entryToDisplay, let project = self.project {
@@ -369,13 +375,13 @@ struct TranslationWorkspaceView: View {
         mutableText[fullRange].link = nil
 
         self.glossaryMatches = glossaryMatcher.detectTerms(in: stringToMatch, from: project.glossaryEntries)
-
-        var highlightContainer = AttributeContainer()
-        highlightContainer.underlineStyle = .single
-        highlightContainer.foregroundColor = NSColor(Color.gold)
         
         for match in glossaryMatches {
             if let range = Range(match.range, in: mutableText) {
+                var highlightContainer = AttributeContainer()
+                highlightContainer.underlineStyle = .single
+                let categoryColor = match.entry.category.highlightColor
+                highlightContainer.foregroundColor = NSColor(categoryColor)
                 mutableText[range].mergeAttributes(highlightContainer, mergePolicy: .keepNew)
             }
         }

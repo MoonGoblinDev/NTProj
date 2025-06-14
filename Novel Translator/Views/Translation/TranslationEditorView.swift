@@ -29,6 +29,10 @@ struct TranslationEditorView: View {
                 HStack{
                     Text("Source: \(chapter.project?.sourceLanguage ?? "")")
                         .font(.headline)
+                    Spacer()
+                    if let project = chapter.project {
+                         TokenCounterView(text: String(sourceText.characters), project: project, autoCount: true)
+                    }
                 }
                 .frame(height: 10)
                 .padding()
@@ -46,6 +50,10 @@ struct TranslationEditorView: View {
                 HStack {
                     Text("Translation: \(chapter.project?.targetLanguage ?? "")")
                         .font(.headline)
+                    Spacer()
+                    if let project = chapter.project {
+                         TokenCounterView(text: String(translatedText.characters), project: project, autoCount: false)
+                    }
                 }
                 .frame(height: 10)
                 .padding()

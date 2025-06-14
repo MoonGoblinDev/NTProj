@@ -40,7 +40,7 @@ struct GlossaryView: View {
                                     .font(.caption)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
-                                    .background(Color.secondary.opacity(0.2), in: Capsule())
+                                    .background(entry.category.highlightColor.opacity(0.2), in: Capsule())
                             }
                             .foregroundStyle(.primary)
                         }
