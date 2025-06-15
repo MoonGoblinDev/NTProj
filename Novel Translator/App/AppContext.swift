@@ -34,4 +34,7 @@ class AppContext: ObservableObject {
     /// A boolean flag that is directly controlled by the ID.
     /// Views will bind their .sheet modifier to this.
     @Published var isSheetPresented: Bool = false
+    
+    // NEW: Property to handle navigation from project-wide search results
+    @Published var searchResultToHighlight: SearchResultItem?
 }

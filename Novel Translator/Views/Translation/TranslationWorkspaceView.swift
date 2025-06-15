@@ -1,25 +1,35 @@
 import SwiftUI
 
 struct TranslationWorkspaceView: View {
+    // Environment Objects
     @EnvironmentObject private var appContext: AppContext
     @EnvironmentObject private var projectManager: ProjectManager
     @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel
     
+    // Project Data
     @ObservedObject var project: TranslationProject
     
+    // View Models & Services
+    @State private var viewModel: TranslationViewModel!
+    private let glossaryMatcher = GlossaryMatcher()
+    
+    // View State
     @State private var isPresetsViewPresented = false
     @State private var isPromptPreviewPresented = false
     @State private var promptPreviewText = ""
+    @State private var isConfigPopoverShown = false
     
-    @State private var viewModel: TranslationViewModel!
-    
+    // Glossary State
     @State private var entryToDisplay: GlossaryEntry?
     @State private var glossaryMatches: [GlossaryMatch] = []
     
-    @State private var isConfigPopoverShown = false
+    // In-Editor Search State
+    @State private var isEditorSearchActive = false
+    @State private var editorSearchQuery = ""
+    @State private var editorSearchResults: [NSRange] = []
+    @State private var currentEditorSearchResultIndex: Int?
     
-    private let glossaryMatcher = GlossaryMatcher()
-    
+    // Computed Properties for active chapter/state
     private var activeChapter: Chapter? {
         guard let activeID = workspaceViewModel.activeChapterID else { return nil }
         return workspaceViewModel.fetchChapter(with: activeID)
@@ -127,6 +137,7 @@ struct TranslationWorkspaceView: View {
         }
         .onChange(of: activeChapter?.id) {
             updateSourceHighlights()
+            resetEditorSearch()
         }
         .onChange(of: activeEditorState?.sourceAttributedText) { oldValue, newValue in
             guard let oldVal = oldValue, let newVal = newValue else { return }
@@ -145,6 +156,10 @@ struct TranslationWorkspaceView: View {
             if let foundEntry = project.glossaryEntries.first(where: { $0.id == newID }) {
                 self.entryToDisplay = foundEntry
             }
+        }
+        .onChange(of: editorSearchQuery) { _,_ in updateEditorSearch() }
+        .onChange(of: appContext.searchResultToHighlight) { _, result in
+            handleSearchResultNavigation(result)
         }
         
         return mainContent
@@ -220,82 +235,108 @@ struct TranslationWorkspaceView: View {
     
     @ViewBuilder private var editorOrPlaceholder: some View {
         if let chapter = activeChapter, let editorState = activeEditorState {
-            ChapterTabsView(workspaceViewModel: workspaceViewModel, project: project)
-            ZStack{
-                TranslationEditorView(
-                    sourceText: .init(get: { editorState.sourceAttributedText }, set: { editorState.sourceAttributedText = $0 }),
-                    translatedText: .init(get: { editorState.translatedAttributedText }, set: { editorState.translatedAttributedText = $0 }),
-                    sourceSelection: .init(get: { editorState.sourceSelection }, set: { editorState.sourceSelection = $0 }),
-                    translatedSelection: .init(get: { editorState.translatedSelection }, set: { editorState.translatedSelection = $0 }),
-                    projectManager: projectManager,
-                    chapter: chapter,
-                    isDisabled: viewModel.isTranslating
-                )
-                VStack{
-                    Spacer()
-                    HStack {
-                        Spacer()
-                    
-                        Button {
-                            // Toggle the popover state
-                            isConfigPopoverShown.toggle()
-                        } label: {
-                            Label("Config", systemImage: "gearshape")
-                        }
-                        .tint(.gray)
-                        .buttonStyle(.borderedProminent)
-                        .popover(isPresented: $isConfigPopoverShown) {
-                            VStack {
-                                Toggle("Force Line Count Sync", isOn: $project.translationConfig.forceLineCountSync)
-                                    .onChange(of: project.translationConfig.forceLineCountSync) { _, _ in
-                                        project.lastModifiedDate = Date()
-                                        projectManager.isProjectDirty = true
+            ZStack(alignment: .top) {
+                VStack(spacing: 0) {
+                    ChapterTabsView(workspaceViewModel: workspaceViewModel, project: project)
+                    ZStack{
+                        TranslationEditorView(
+                            sourceText: .init(get: { editorState.sourceAttributedText }, set: { editorState.sourceAttributedText = $0 }),
+                            translatedText: .init(get: { editorState.translatedAttributedText }, set: { editorState.translatedAttributedText = $0 }),
+                            sourceSelection: .init(get: { editorState.sourceSelection }, set: { editorState.sourceSelection = $0 }),
+                            translatedSelection: .init(get: { editorState.translatedSelection }, set: { editorState.translatedSelection = $0 }),
+                            projectManager: projectManager,
+                            chapter: chapter,
+                            isDisabled: viewModel.isTranslating
+                        )
+                        VStack{
+                            Spacer()
+                            HStack {
+                                Spacer()
+                            
+                                Button {
+                                    isConfigPopoverShown.toggle()
+                                } label: {
+                                    Label("Config", systemImage: "gearshape")
+                                }
+                                .tint(.gray)
+                                .buttonStyle(.borderedProminent)
+                                .popover(isPresented: $isConfigPopoverShown) {
+                                    VStack {
+                                        Toggle("Force Line Count Sync", isOn: $project.translationConfig.forceLineCountSync)
+                                            .onChange(of: project.translationConfig.forceLineCountSync) { _, _ in
+                                                project.lastModifiedDate = Date()
+                                                projectManager.isProjectDirty = true
+                                            }
                                     }
+                                    .padding()
+                                }
+                                .help("Advanced translation settings")
+                                .onHover { isHovering in
+                                    if isHovering {
+                                        NSCursor.pointingHand.set()
+                                    } else {
+                                        NSCursor.arrow.set()
+                                    }
+                                }
+                                
+                                Button("Prompt Preview", systemImage: "sparkles.square.filled.on.square") {
+                                    generatePromptPreview()
+                                }
+                                .tint(.gray)
+                                .buttonStyle(.borderedProminent)
+                                .help("Show the final prompt that will be sent to the AI")
+                                .disabled(chapter.rawContent.isEmpty)
+                                .onHover { isHovering in
+                                    if isHovering {
+                                        NSCursor.pointingHand.set()
+                                    } else {
+                                        NSCursor.arrow.set()
+                                    }
+                                }
+                                
+                                Button("Translate", systemImage: "sparkles") {
+                                    Task {
+                                        await viewModel.streamTranslateChapter(project: project, chapter: chapter, settings: projectManager.settings)
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(activeChapter == nil || chapter.rawContent.isEmpty == true || viewModel?.isTranslating == true)
+                                .onHover { isHovering in
+                                    if isHovering {
+                                        NSCursor.pointingHand.set()
+                                    } else {
+                                        NSCursor.arrow.set()
+                                    }
+                                }
                             }
                             .padding()
                         }
-                        .help("Advanced translation settings")
-                        .onHover { isHovering in
-                            if isHovering {
-                                NSCursor.pointingHand.set()
-                            } else {
-                                NSCursor.arrow.set()
-                            }
-                        }
-                        
-                        Button("Prompt Preview", systemImage: "sparkles.square.filled.on.square") {
-                            generatePromptPreview()
-                        }
-                        .tint(.gray)
-                        .buttonStyle(.borderedProminent)
-                        .help("Show the final prompt that will be sent to the AI")
-                        .disabled(chapter.rawContent.isEmpty)
-                        .onHover { isHovering in
-                            if isHovering {
-                                NSCursor.pointingHand.set()
-                            } else {
-                                NSCursor.arrow.set()
-                            }
-                        }
-                        
-                        Button("Translate", systemImage: "sparkles") {
-                            Task {
-                                await viewModel.streamTranslateChapter(project: project, chapter: chapter, settings: projectManager.settings)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(activeChapter == nil || chapter.rawContent.isEmpty == true || viewModel?.isTranslating == true)
-                        .onHover { isHovering in
-                            if isHovering {
-                                NSCursor.pointingHand.set()
-                            } else {
-                                NSCursor.arrow.set()
-                            }
-                        }
                     }
-                    .padding()
+                }
+
+                if isEditorSearchActive {
+                    EditorSearchView(
+                        searchQuery: $editorSearchQuery,
+                        totalResults: editorSearchResults.count,
+                        currentResultIndex: $currentEditorSearchResultIndex,
+                        onFindNext: { findNextMatch() },
+                        onFindPrevious: { findPreviousMatch() },
+                        onClose: {
+                            isEditorSearchActive = false
+                            editorSearchQuery = ""
+                            updateEditorSearch()
+                        }
+                    )
+                    .padding(.top, 45) // Position below tabs
                 }
             }
+            .background(
+                Button("") {
+                    isEditorSearchActive.toggle()
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                .hidden()
+            )
             
         } else {
             ContentUnavailableView(
@@ -331,8 +372,6 @@ struct TranslationWorkspaceView: View {
         }
 
         let promptBuilder = PromptBuilder()
-        let glossaryMatcher = GlossaryMatcher()
-
         let selectedPreset = projectManager.settings.promptPresets.first { $0.id == projectManager.settings.selectedPromptPresetID }
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
 
@@ -361,8 +400,7 @@ struct TranslationWorkspaceView: View {
         
         var mutableText = editorState.sourceAttributedText
         
-        let fullNSRange = NSRange(location: 0, length: stringToMatch.utf16.count)
-        guard let fullRange = Range(fullNSRange, in: mutableText) else { return }
+        let fullRange = mutableText.startIndex..<mutableText.endIndex
         
         mutableText[fullRange].foregroundColor = NSColor.textColor
         mutableText[fullRange].underlineStyle = nil
@@ -381,5 +419,138 @@ struct TranslationWorkspaceView: View {
         }
         
         editorState.sourceAttributedText = mutableText
+        
+        if isEditorSearchActive {
+            applyEditorSearchHighlights()
+        }
+    }
+
+    // MARK: - Search Handling Methods
+
+    private func resetEditorSearch() {
+        isEditorSearchActive = false
+        editorSearchQuery = ""
+        editorSearchResults = []
+        currentEditorSearchResultIndex = nil
+        updateEditorSearch()
+    }
+
+    private func updateEditorSearch() {
+        guard let state = activeEditorState else {
+            editorSearchResults = []
+            currentEditorSearchResultIndex = nil
+            return
+        }
+        
+        guard !editorSearchQuery.isEmpty else {
+            editorSearchResults = []
+            currentEditorSearchResultIndex = nil
+            applyEditorSearchHighlights(clearOnly: true)
+            return
+        }
+        
+        let fullText = String(state.sourceAttributedText.characters)
+        do {
+            let regex = try NSRegularExpression(pattern: editorSearchQuery, options: .caseInsensitive)
+            let matches = regex.matches(in: fullText, range: NSRange(location: 0, length: fullText.utf16.count))
+            editorSearchResults = matches.map { $0.range }
+            
+            if !editorSearchResults.isEmpty {
+                currentEditorSearchResultIndex = 0
+                navigateToMatch(at: 0)
+            } else {
+                currentEditorSearchResultIndex = nil
+            }
+            applyEditorSearchHighlights()
+        } catch {
+            editorSearchResults = []
+            currentEditorSearchResultIndex = nil
+            applyEditorSearchHighlights(clearOnly: true)
+        }
+    }
+    
+    private func findNextMatch() {
+        guard let currentIndex = currentEditorSearchResultIndex, !editorSearchResults.isEmpty else { return }
+        let nextIndex = (currentIndex + 1) % editorSearchResults.count
+        currentEditorSearchResultIndex = nextIndex
+        navigateToMatch(at: nextIndex)
+    }
+
+    private func findPreviousMatch() {
+        guard let currentIndex = currentEditorSearchResultIndex, !editorSearchResults.isEmpty else { return }
+        let prevIndex = (currentIndex - 1 + editorSearchResults.count) % editorSearchResults.count
+        currentEditorSearchResultIndex = prevIndex
+        navigateToMatch(at: prevIndex)
+    }
+    
+    private func navigateToMatch(at index: Int) {
+        guard let state = activeEditorState, index < editorSearchResults.count else { return }
+        let range = editorSearchResults[index]
+        state.sourceSelection = range
+    }
+    
+    private func applyEditorSearchHighlights(clearOnly: Bool = false) {
+        guard let state = activeEditorState else { return }
+
+        var attributedString = state.sourceAttributedText
+        let entireRange = attributedString.startIndex..<attributedString.endIndex
+        
+        // Clear previous search highlights across the entire string.
+        attributedString[entireRange].backgroundColor = nil
+
+        // If we're only clearing highlights (e.g., search term is empty), we're done.
+        if clearOnly {
+            state.sourceAttributedText = attributedString
+            return
+        }
+        
+        // Apply standard highlight to all matches.
+        for range in editorSearchResults {
+            if let swiftRange = Range(range, in: attributedString) {
+                attributedString[swiftRange].backgroundColor = NSColor.systemYellow.withAlphaComponent(0.3)
+            }
+        }
+
+        // Apply distinct highlight to the current match.
+        if let currentIndex = currentEditorSearchResultIndex, currentIndex < editorSearchResults.count {
+            let currentRange = editorSearchResults[currentIndex]
+            if let swiftRange = Range(currentRange, in: attributedString) {
+                attributedString[swiftRange].backgroundColor = NSColor.systemOrange.withAlphaComponent(0.5)
+            }
+        }
+        
+        state.sourceAttributedText = attributedString
+    }
+
+    private func handleSearchResultNavigation(_ result: SearchResultItem?) {
+        guard let result = result else { return }
+        
+        workspaceViewModel.openChapter(id: result.chapterID)
+        
+        Task {
+            while workspaceViewModel.activeChapterID != result.chapterID {
+                await Task.yield()
+            }
+            
+            guard let state = self.activeEditorState else { return }
+            
+            let fullText = (result.editorType == .source) ? String(state.sourceAttributedText.characters) : String(state.translatedAttributedText.characters)
+            
+            let lines = fullText.components(separatedBy: .newlines)
+            guard result.lineNumber - 1 < lines.count else { return }
+            
+            let charactersUpToLine = lines.prefix(result.lineNumber - 1).map { $0.utf16.count + 1 }.reduce(0, +)
+            let absoluteLocation = charactersUpToLine + result.matchRangeInLine.location
+            
+            let finalRange = NSRange(location: absoluteLocation, length: result.matchRangeInLine.length)
+            
+            if result.editorType == .source {
+                state.sourceSelection = finalRange
+            } else {
+                state.translatedSelection = finalRange
+            }
+            
+            appContext.searchResultToHighlight = nil
+        }
     }
 }
