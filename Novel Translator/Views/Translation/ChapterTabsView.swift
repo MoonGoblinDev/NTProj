@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ChapterTabsView: View {
-    @ObservedObject var workspaceViewModel: WorkspaceViewModel // FIX: Use @ObservedObject for ObservableObject
+    @ObservedObject var workspaceViewModel: WorkspaceViewModel
     let project: TranslationProject
 
     var body: some View {

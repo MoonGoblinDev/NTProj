@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ChapterListView: View {
-    @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel // FIX: Use EnvironmentObject
+    @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel 
     @ObservedObject var project: TranslationProject
     
     @State private var isImporterPresented = false

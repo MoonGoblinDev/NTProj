@@ -12,9 +12,19 @@ class WorkspaceViewModel: ObservableObject {
     @Published var isCloseChapterAlertPresented: Bool = false
     
     // The source of truth for all project data. It's weak to avoid retain cycles.
-    // It's not @Published itself, but we observe it manually.
     private(set) weak var project: TranslationProject?
     
+    var activeChapter: Chapter? {
+        guard let activeID = activeChapterID else { return nil }
+        return fetchChapter(with: activeID)
+    }
+
+    var activeEditorState: ChapterEditorState? {
+        guard let activeID = activeChapterID, let state = editorStates[activeID] else {
+            return nil
+        }
+        return state
+    }
     // A computed property that checks if any open chapter has unsaved changes.
     // This is the primary driver for enabling the "Save" menu item.
     var hasUnsavedEditorChanges: Bool {

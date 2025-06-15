@@ -150,7 +150,6 @@ fileprivate struct PromptPresetDetailView: View {
         .padding()
         .onChange(of: preset.name) { _, _ in preset.lastModifiedDate = Date() }
         .onChange(of: preset.prompt) { _, _ in preset.lastModifiedDate = Date() }
-        // NEW: Also track changes on the new fields
         .onChange(of: preset.provideExample) { _, _ in preset.lastModifiedDate = Date() }
         .onChange(of: preset.exampleRawText) { _, _ in preset.lastModifiedDate = Date() }
         .onChange(of: preset.exampleTranslatedText) { _, _ in preset.lastModifiedDate = Date() }

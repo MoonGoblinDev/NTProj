@@ -11,15 +11,13 @@ struct NovelTranslatorApp: App {
             ContentView()
                 .environmentObject(appContext)
                 .environmentObject(projectManager)
-                .environmentObject(workspaceViewModel) // FIX: Use environmentObject for ObservableObject
-                .onChange(of: projectManager.currentProject) { _, newProject in // FIX: Equatable conformance on TranslationProject handles this
-                    // When the project manager loads a new project, tell the workspace about it.
+                .environmentObject(workspaceViewModel) 
+                .onChange(of: projectManager.currentProject) { _, newProject in
                     workspaceViewModel.setCurrentProject(newProject)
                 }
         }
         .handlesExternalEvents(matching: Set(arrayLiteral: "noveltranslator"))
         .commands {
-            // Replaces the standard "Save" item in the File menu
             CommandGroup(replacing: .saveItem) {
                 Button("Save Project") {
                     saveProject()
@@ -53,12 +51,9 @@ struct NovelTranslatorApp: App {
     /// Triggers the save action on the workspace view model.
     private func saveProject() {
         do {
-            // First, ensure any unsaved text in editors is written to the project model
             try workspaceViewModel.commitAllUnsavedChanges()
-            // Then, tell the project manager to write the project file to disk
             projectManager.saveProject()
         } catch {
-            // Error handling from a menu item is limited. We'll log it to the console.
             print("Failed to save from menu command: \(error.localizedDescription)")
         }
     }

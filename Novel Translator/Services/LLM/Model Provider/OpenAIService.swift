@@ -15,8 +15,6 @@ class OpenAIService: LLMServiceProtocol {
     }
     
     func translate(request: TranslationRequest) async throws -> TranslationResponse {
-        // Placeholder: Implement actual API call to OpenAI
-        // FIX: Access the model directly from the request object.
         print("Calling OpenAI API with model: \(request.model)")
         
         // Simulate network delay
@@ -27,7 +25,6 @@ class OpenAIService: LLMServiceProtocol {
             translatedText: simulatedResponse,
             inputTokens: 100,
             outputTokens: 50,
-            // FIX: Access the model directly from the request object.
             modelUsed: request.model,
             finishReason: "stop"
         )

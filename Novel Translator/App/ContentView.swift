@@ -10,12 +10,10 @@ struct ContentView: View {
         Group {
             if let project = projectManager.currentProject {
                 NavigationSplitView {
-                    // FIX: Pass the single active project to the SidebarView.
                     SidebarView(project: project)
                     .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 600)
 
                 } detail: {
-                    // FIX: Pass the single active project to the TranslationWorkspaceView.
                     TranslationWorkspaceView(project: project)
                 }
             } else {
@@ -27,7 +25,6 @@ struct ContentView: View {
                 return
             }
             
-            // Just update the shared state. No notifications needed.
             if let uuid = UUID(uuidString: url.lastPathComponent) {
                 appContext.glossaryEntryToEditID = uuid
             }

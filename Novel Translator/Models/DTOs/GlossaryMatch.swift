@@ -7,8 +7,9 @@
 
 import Foundation
 
-struct GlossaryMatch {
+
+struct GlossaryMatch: Equatable {
     let entry: GlossaryEntry
     let range: Range<String.Index>
-    let matchedAlias: String? // Which alias was matched, if any
+    let matchedAlias: String? 
 }

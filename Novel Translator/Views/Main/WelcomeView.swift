@@ -11,7 +11,7 @@ struct WelcomeView: View {
     var body: some View {
         VStack {
             ContentUnavailableView {
-                Label("Welcome to Novel Translator", systemImage: "book.and.globe")
+                Label("Welcome to Novel Translator", systemImage: "books.vertical.fill")
                     .font(.largeTitle)
             } description: {
                 Text("Create a new project or open an existing one to begin.")
@@ -39,8 +39,6 @@ struct WelcomeView: View {
                     } label: {
                         VStack(alignment: .leading) {
                             Text(projectMeta.name).fontWeight(.bold)
-                            // FIX: Removed the file path display as it's no longer directly available
-                            // and requires resolving the bookmark, which is best avoided in the view.
                         }
                     }
                     .buttonStyle(.plain)

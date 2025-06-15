@@ -1,15 +1,12 @@
 import SwiftUI
 
 struct SidebarView: View {
-    // FIX: Receive the single, active project as an ObservedObject.
-    // The view no longer needs to know about a list of projects or a selected ID.
     @ObservedObject var project: TranslationProject
     
     @State private var selectedTab: SidebarTab = .chapters
     
     var body: some View {
         VStack(spacing: 0) {
-            // The project is guaranteed to exist, so we can use it directly.
             VStack(spacing: 0) {
                 Picker("Sidebar Tab", selection: $selectedTab) {
                     ForEach(SidebarTab.allCases, id: \.self) { tab in
@@ -27,7 +24,7 @@ struct SidebarView: View {
                     ChapterListView(project: project)
                 case .glossary:
                     GlossaryView(project: project)
-                case .search: // NEW
+                case .search: 
                     SearchView(project: project)
                 case .settings:
                     ProjectSettingsView(project: project)

@@ -137,8 +137,6 @@ struct SearchView: View {
         appContext.searchResultToHighlight = result
     }
     
-    // FIX: Re-implemented using AttributedString to correctly apply styles
-    // without changing the view's type from Text to a generic View.
     private func highlightedText(for result: SearchResultItem) -> Text {
         // Create an AttributedString from the full line of text.
         var attributedString = AttributedString(result.lineContent)

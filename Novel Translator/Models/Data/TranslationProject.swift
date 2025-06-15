@@ -1,8 +1,7 @@
 import SwiftUI
 
-// The main container for all project data, conforming to ObservableObject for UI updates,
-// and Codable for JSON persistence.
-class TranslationProject: ObservableObject, Codable, Identifiable, Equatable { // FIX: Add Equatable conformance
+
+class TranslationProject: ObservableObject, Codable, Identifiable, Equatable {
     @Published var id: UUID
     @Published var name: String
     @Published var sourceLanguage: String
@@ -14,10 +13,10 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable { /
     @Published var chapters: [Chapter]
     @Published var glossaryEntries: [GlossaryEntry]
     
-    // These are no longer direct relationships but part of the project file.
+
     @Published var stats: TranslationStats
     @Published var importSettings: ImportSettings
-    @Published var translationConfig: TranslationConfig // NEW: Add translation config
+    @Published var translationConfig: TranslationConfig
 
     struct TranslationConfig: Codable {
         var forceLineCountSync: Bool = false
@@ -37,14 +36,14 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable { /
         
         self.stats = TranslationStats()
         self.importSettings = ImportSettings()
-        self.translationConfig = TranslationConfig() // NEW: Initialize config
+        self.translationConfig = TranslationConfig()
     }
     
     // MARK: - Codable Conformance
     
     enum CodingKeys: String, CodingKey {
         case id, name, sourceLanguage, targetLanguage, createdDate, lastModifiedDate, projectDescription
-        case chapters, glossaryEntries, stats, importSettings, translationConfig // NEW: Add to coding keys
+        case chapters, glossaryEntries, stats, importSettings, translationConfig
     }
     
     required init(from decoder: Decoder) throws {
@@ -60,7 +59,6 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable { /
         glossaryEntries = try container.decode([GlossaryEntry].self, forKey: .glossaryEntries)
         stats = try container.decode(TranslationStats.self, forKey: .stats)
         importSettings = try container.decode(ImportSettings.self, forKey: .importSettings)
-        // NEW: Decode the config, providing a default for older project files that don't have it.
         translationConfig = try container.decodeIfPresent(TranslationConfig.self, forKey: .translationConfig) ?? TranslationConfig()
     }
     
@@ -77,10 +75,10 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable { /
         try container.encode(glossaryEntries, forKey: .glossaryEntries)
         try container.encode(stats, forKey: .stats)
         try container.encode(importSettings, forKey: .importSettings)
-        try container.encode(translationConfig, forKey: .translationConfig) // NEW: Encode the config
+        try container.encode(translationConfig, forKey: .translationConfig)
     }
 
-    // FIX: Add Equatable conformance by comparing unique IDs
+
     static func == (lhs: TranslationProject, rhs: TranslationProject) -> Bool {
         lhs.id == rhs.id
     }

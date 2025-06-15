@@ -14,8 +14,6 @@ extension Range where Bound == String.Index {
 
 extension String {
     /// A rough estimation of token count.
-    /// This is not accurate and should be replaced with a proper tokenizer for specific models.
-    /// A common rule of thumb is that 1 token is approximately 0.75 words.
     func estimateTokens() -> Int {
         let words = self.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         // Using the 4/3 multiplier for words-to-tokens.
