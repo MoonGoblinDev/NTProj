@@ -7,33 +7,6 @@
 
 import Foundation
 
-// MARK: - Custom Errors
-enum AnthropicError: LocalizedError {
-    case invalidAPIKey
-    case apiError(String)
-    case noResponseText
-    case invalidURL
-    case responseDecodingFailed(Error)
-    case streamingError(String)
-    case glossaryExtractionFailed(String)
-    case tokenCountFailed(String)
-    case modelFetchFailed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidAPIKey: "The provided Anthropic API Key is invalid or missing."
-        case .apiError(let message): "The API returned an error: \(message)"
-        case .noResponseText: "The API response did not contain any text."
-        case .invalidURL: "Could not create a valid URL for the Anthropic API endpoint."
-        case .responseDecodingFailed(let error): "Failed to decode the API response: \(error.localizedDescription)"
-        case .streamingError(let message): "An error occurred during streaming: \(message)"
-        case .glossaryExtractionFailed(let message): "Failed to extract glossary: \(message)"
-        case .tokenCountFailed(let message): "Failed to count tokens: \(message)"
-        case .modelFetchFailed(let message): "Failed to fetch model list: \(message)"
-        }
-    }
-}
-
 // MARK: - Codable Structs for API Communication
 
 // Request Payloads
@@ -127,6 +100,12 @@ class AnthropicService: LLMServiceProtocol {
     private let apiKey: String
     private let baseURL = "https://api.anthropic.com/v1"
     private let apiVersion = "2023-06-01"
+    private var headers: [String: String] {
+        [
+            "x-api-key": apiKey,
+            "anthropic-version": apiVersion
+        ]
+    }
 
     init(apiKey: String) {
         self.apiKey = apiKey
@@ -136,37 +115,19 @@ class AnthropicService: LLMServiceProtocol {
     static func fetchAvailableModels(apiKey: String) async throws -> [String] {
         guard !apiKey.isEmpty else { return [] }
         
-        guard let url = URL(string: "https://api.anthropic.com/v1/models") else {
-            throw AnthropicError.invalidURL
-        }
+        let urlString = "https://api.anthropic.com/v1/models"
+        let staticHeaders: [String: String] = [
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01"
+        ]
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "No error details"
-            throw AnthropicError.modelFetchFailed("Status Code: \((response as? HTTPURLResponse)?.statusCode ?? 0). Body: \(errorBody)")
-        }
-
-        do {
-            let decodedResponse = try JSONDecoder().decode(AnthropicModelsListResponse.self, from: data)
-            let modelIds = decodedResponse.data.map { $0.id }.sorted()
-            return modelIds
-        } catch {
-            throw AnthropicError.responseDecodingFailed(error)
-        }
+        let decodedResponse: AnthropicModelsListResponse = try await LLMServiceHelper.performGETRequest(urlString: urlString, headers: staticHeaders)
+        return decodedResponse.data.map { $0.id }.sorted()
     }
 
     // MARK: - Non-Streaming Translation
     func translate(request: TranslationRequest) async throws -> TranslationResponse {
-        guard let url = URL(string: "\(baseURL)/messages") else {
-            throw AnthropicError.invalidURL
-        }
-
+        let urlString = "\(baseURL)/messages"
         let payload = AnthropicRequestPayload(
             model: request.model,
             messages: [AnthropicMessage(role: "user", content: request.prompt)],
@@ -175,20 +136,14 @@ class AnthropicService: LLMServiceProtocol {
             stream: false
         )
 
-        let urlRequest = try buildURLRequest(url: url, payload: payload)
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        try handleResponseError(response: response, data: data)
-
-        let decodedResponse: AnthropicResponsePayload
-        do {
-            decodedResponse = try JSONDecoder().decode(AnthropicResponsePayload.self, from: data)
-        } catch {
-            throw AnthropicError.responseDecodingFailed(error)
-        }
+        let decodedResponse: AnthropicResponsePayload = try await LLMServiceHelper.performRequest(
+            urlString: urlString,
+            payload: payload,
+            headers: headers
+        )
 
         guard let text = decodedResponse.content.first(where: { $0.type == "text" })?.text else {
-            throw AnthropicError.noResponseText
+            throw LLMServiceError.noResponseText
         }
 
         return TranslationResponse(
@@ -205,10 +160,7 @@ class AnthropicService: LLMServiceProtocol {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    guard let url = URL(string: "\(baseURL)/messages") else {
-                        throw AnthropicError.invalidURL
-                    }
-
+                    let urlString = "\(baseURL)/messages"
                     let payload = AnthropicRequestPayload(
                         model: request.model,
                         messages: [AnthropicMessage(role: "user", content: request.prompt)],
@@ -217,17 +169,17 @@ class AnthropicService: LLMServiceProtocol {
                         stream: true
                     )
 
-                    let urlRequest = try buildURLRequest(url: url, payload: payload)
-                    let (bytes, response) = try await URLSession.shared.bytes(for: urlRequest)
+                    let (bytes, _) = try await LLMServiceHelper.performStreamingRequest(
+                        urlString: urlString,
+                        payload: payload,
+                        headers: headers
+                    )
                     
-                    try handleResponseError(response: response)
-
                     var finishReason: String?
                     var outputTokens: Int?
 
                     for try await line in bytes.lines {
                         if line.hasPrefix("event: ") {
-                            // We don't need to parse the event type separately for this implementation
                             continue
                         } else if line.hasPrefix("data: ") {
                             let jsonString = line.dropFirst(6)
@@ -253,7 +205,6 @@ class AnthropicService: LLMServiceProtocol {
                                     outputTokens = messageDelta.usage.output_tokens
                                 }
                             case .messageStop:
-                                // Send one final chunk with the stop reason
                                 let finalChunk = StreamingTranslationChunk(textChunk: "", inputTokens: nil, outputTokens: outputTokens, finishReason: finishReason ?? "end_turn")
                                 continuation.yield(finalChunk)
                                 continuation.finish()
@@ -273,71 +224,39 @@ class AnthropicService: LLMServiceProtocol {
     
     // MARK: - Glossary Extraction
     func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
-        // Use a powerful model for better JSON adherence
         let request = TranslationRequest(
             prompt: prompt,
-            configuration: .init(provider: .anthropic), // temp config
+            configuration: .init(provider: .anthropic),
             model: "claude-3-5-sonnet-20240620"
         )
         
         let response = try await self.translate(request: request)
-        let jsonText = response.translatedText
         
-        guard let jsonData = jsonText.data(using: .utf8) else {
-            throw AnthropicError.responseDecodingFailed(URLError(.cannotDecodeContentData))
+        guard let jsonData = response.translatedText.data(using: .utf8) else {
+            throw LLMServiceError.responseDecodingFailed(URLError(.cannotDecodeContentData))
         }
 
         do {
             let wrapper = try JSONDecoder().decode(GlossaryResponseWrapper.self, from: jsonData)
             return wrapper.entries
         } catch {
-            throw AnthropicError.responseDecodingFailed(error)
+            throw LLMServiceError.responseDecodingFailed(error)
         }
     }
 
     // MARK: - Token Counting
     func countTokens(text: String, model: String) async throws -> Int {
-        guard let url = URL(string: "\(baseURL)/messages/count_tokens") else {
-            throw AnthropicError.invalidURL
-        }
-
+        let urlString = "\(baseURL)/messages/count_tokens"
         let payload = AnthropicTokenCountRequest(
             model: model,
             messages: [AnthropicMessage(role: "user", content: text)]
         )
-
-        let urlRequest = try buildURLRequest(url: url, payload: payload)
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-
-        try handleResponseError(response: response, data: data)
-
-        do {
-            let decodedResponse = try JSONDecoder().decode(AnthropicTokenCountResponse.self, from: data)
-            return decodedResponse.input_tokens
-        } catch {
-            throw AnthropicError.responseDecodingFailed(error)
-        }
-    }
-
-    // MARK: - Private Helpers
-    private func buildURLRequest(url: URL, payload: some Encodable) throws -> URLRequest {
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        urlRequest.setValue(apiVersion, forHTTPHeaderField: "anthropic-version")
-        urlRequest.httpBody = try JSONEncoder().encode(payload)
-        return urlRequest
-    }
-    
-    private func handleResponseError(response: URLResponse, data: Data? = nil) throws {
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            var errorMessage = "Status Code: \(statusCode)."
-            if let data = data, let errorBody = String(data: data, encoding: .utf8) {
-                errorMessage += " Body: \(errorBody)"
-            }
-            throw AnthropicError.apiError(errorMessage)
-        }
+        
+        let decodedResponse: AnthropicTokenCountResponse = try await LLMServiceHelper.performRequest(
+            urlString: urlString,
+            payload: payload,
+            headers: headers
+        )
+        return decodedResponse.input_tokens
     }
 }

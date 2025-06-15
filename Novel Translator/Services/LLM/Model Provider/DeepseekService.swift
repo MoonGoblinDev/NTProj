@@ -8,31 +8,6 @@
 import Foundation
 import Tiktoken
 
-// MARK: - Custom Errors
-enum DeepseekError: LocalizedError {
-    case invalidAPIKey
-    case apiError(String)
-    case noResponseText
-    case invalidURL
-    case responseDecodingFailed(Error)
-    case modelFetchFailed(String)
-    case glossaryExtractionFailed(String)
-    case streamingError(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidAPIKey: "The provided Deepseek API Key is invalid or missing."
-        case .apiError(let message): "The API returned an error: \(message)"
-        case .noResponseText: "The API response did not contain any text."
-        case .invalidURL: "Could not create a valid URL for the Deepseek API endpoint."
-        case .responseDecodingFailed(let error): "Failed to decode the API response: \(error.localizedDescription)"
-        case .modelFetchFailed(let message): "Failed to fetch model list: \(message)"
-        case .glossaryExtractionFailed(let message): "Failed to extract glossary: \(message)"
-        case .streamingError(let message): "An error occurred during streaming: \(message)"
-        }
-    }
-}
-
 // MARK: - Codable Structs for API Communication (OpenAI-compatible)
 
 // Request Payloads
@@ -101,6 +76,9 @@ private struct DeepseekModelInfo: Codable {
 class DeepseekService: LLMServiceProtocol {
     private let apiKey: String
     private let baseURL = "https://api.deepseek.com/v1"
+    private var headers: [String: String] {
+        ["Authorization": "Bearer \(apiKey)"]
+    }
 
     init(apiKey: String) {
         self.apiKey = apiKey
@@ -111,42 +89,21 @@ class DeepseekService: LLMServiceProtocol {
         guard !apiKey.isEmpty else { return [] }
         
         let endpoint = "https://api.deepseek.com/v1/models"
-        guard let url = URL(string: endpoint) else {
-            throw DeepseekError.invalidURL
-        }
+        let headers = ["Authorization": "Bearer \(apiKey)"]
         
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "GET"
-        urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        let decodedResponse: DeepseekModelsListResponse = try await LLMServiceHelper.performGETRequest(urlString: endpoint, headers: headers)
         
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        let filteredModels = decodedResponse.data
+            .filter { $0.id.hasPrefix("deepseek-") }
+            .map { $0.id }
+            .sorted()
         
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "No error details"
-            throw DeepseekError.modelFetchFailed("Status Code: \((response as? HTTPURLResponse)?.statusCode ?? 0). Body: \(errorBody)")
-        }
-        
-        do {
-            let decodedResponse = try JSONDecoder().decode(DeepseekModelsListResponse.self, from: data)
-            
-            // Filter for common, useful models and sort them
-            let filteredModels = decodedResponse.data
-                .filter { $0.id.hasPrefix("deepseek-") }
-                .map { $0.id }
-                .sorted()
-            
-            return filteredModels
-        } catch {
-            throw DeepseekError.responseDecodingFailed(error)
-        }
+        return filteredModels
     }
 
     // MARK: - Non-Streaming Translation
     func translate(request: TranslationRequest) async throws -> TranslationResponse {
-        guard let url = URL(string: "\(baseURL)/chat/completions") else {
-            throw DeepseekError.invalidURL
-        }
-
+        let urlString = "\(baseURL)/chat/completions"
         let payload = DeepseekRequestPayload(
             model: request.model,
             messages: [DeepseekMessage(role: "user", content: request.prompt)],
@@ -156,20 +113,14 @@ class DeepseekService: LLMServiceProtocol {
             response_format: nil
         )
 
-        let urlRequest = try buildURLRequest(url: url, payload: payload)
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        try handleResponseError(response: response, data: data)
-
-        let decodedResponse: DeepseekResponsePayload
-        do {
-            decodedResponse = try JSONDecoder().decode(DeepseekResponsePayload.self, from: data)
-        } catch {
-            throw DeepseekError.responseDecodingFailed(error)
-        }
+        let decodedResponse: DeepseekResponsePayload = try await LLMServiceHelper.performRequest(
+            urlString: urlString,
+            payload: payload,
+            headers: headers
+        )
 
         guard let text = decodedResponse.choices.first?.message.content else {
-            throw DeepseekError.noResponseText
+            throw LLMServiceError.noResponseText
         }
 
         return TranslationResponse(
@@ -186,10 +137,7 @@ class DeepseekService: LLMServiceProtocol {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    guard let url = URL(string: "\(baseURL)/chat/completions") else {
-                        throw DeepseekError.invalidURL
-                    }
-
+                    let urlString = "\(baseURL)/chat/completions"
                     let payload = DeepseekRequestPayload(
                         model: request.model,
                         messages: [DeepseekMessage(role: "user", content: request.prompt)],
@@ -199,11 +147,12 @@ class DeepseekService: LLMServiceProtocol {
                         response_format: nil
                     )
 
-                    let urlRequest = try buildURLRequest(url: url, payload: payload)
-                    let (bytes, response) = try await URLSession.shared.bytes(for: urlRequest)
+                    let (bytes, _) = try await LLMServiceHelper.performStreamingRequest(
+                        urlString: urlString,
+                        payload: payload,
+                        headers: headers
+                    )
                     
-                    try handleResponseError(response: response)
-
                     for try await line in bytes.lines {
                         if line.hasPrefix("data: ") {
                             let jsonString = line.dropFirst(6)
@@ -221,7 +170,7 @@ class DeepseekService: LLMServiceProtocol {
                                 
                                 let chunk = StreamingTranslationChunk(
                                     textChunk: choice?.delta.content ?? "",
-                                    inputTokens: nil, // Deepseek stream does not provide token counts per chunk
+                                    inputTokens: nil,
                                     outputTokens: nil,
                                     finishReason: choice?.finish_reason
                                 )
@@ -246,12 +195,9 @@ class DeepseekService: LLMServiceProtocol {
     
     // MARK: - Glossary Extraction
     func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
-        guard let url = URL(string: "\(baseURL)/chat/completions") else {
-            throw DeepseekError.invalidURL
-        }
-
+        let urlString = "\(baseURL)/chat/completions"
         let payload = DeepseekRequestPayload(
-            model: "deepseek-chat", // Use a smart model for JSON mode
+            model: "deepseek-chat",
             messages: [DeepseekMessage(role: "user", content: prompt)],
             temperature: 0.1,
             max_tokens: nil,
@@ -259,32 +205,25 @@ class DeepseekService: LLMServiceProtocol {
             response_format: .init(type: "json_object")
         )
 
-        let urlRequest = try buildURLRequest(url: url, payload: payload)
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-
-        try handleResponseError(response: response, data: data, forGlossary: true)
-
-        let decodedResponse: DeepseekResponsePayload
-        do {
-            decodedResponse = try JSONDecoder().decode(DeepseekResponsePayload.self, from: data)
-        } catch {
-            throw DeepseekError.responseDecodingFailed(error)
-        }
+        let decodedResponse: DeepseekResponsePayload = try await LLMServiceHelper.performRequest(
+            urlString: urlString,
+            payload: payload,
+            headers: headers
+        )
         
         guard let jsonText = decodedResponse.choices.first?.message.content else {
-            return [] // If the model returns nothing, assume no entries.
+            return []
         }
         
         guard let jsonData = jsonText.data(using: .utf8) else {
-            throw DeepseekError.responseDecodingFailed(URLError(.cannotDecodeContentData))
+            throw LLMServiceError.responseDecodingFailed(URLError(.cannotDecodeContentData))
         }
 
         do {
-            // Use the flexible shared wrapper. This will use the robust GlossaryEntry decoder internally.
             let wrapper = try JSONDecoder().decode(GlossaryResponseWrapper.self, from: jsonData)
             return wrapper.entries
         } catch {
-            throw DeepseekError.responseDecodingFailed(error)
+            throw LLMServiceError.responseDecodingFailed(error)
         }
     }
 
@@ -294,32 +233,7 @@ class DeepseekService: LLMServiceProtocol {
             let count = try await getTokenCount(for: text, model: "gpt-4")
             return count
         } catch {
-            throw DeepseekError.apiError("Token counting failed via Tiktoken: \(error.localizedDescription)")
-        }
-    }
-
-    // MARK: - Private Helpers
-    private func buildURLRequest(url: URL, payload: some Encodable) throws -> URLRequest {
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.httpBody = try JSONEncoder().encode(payload)
-        return urlRequest
-    }
-    
-    private func handleResponseError(response: URLResponse, data: Data? = nil, forGlossary: Bool = false) throws {
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            var errorMessage = "Status Code: \(statusCode)."
-            if let data = data, let errorBody = String(data: data, encoding: .utf8) {
-                errorMessage += " Body: \(errorBody)"
-            }
-            if forGlossary {
-                throw DeepseekError.glossaryExtractionFailed(errorMessage)
-            } else {
-                throw DeepseekError.apiError(errorMessage)
-            }
+            throw LLMServiceError.serviceNotImplemented("Token counting failed via Tiktoken: \(error.localizedDescription)")
         }
     }
 }

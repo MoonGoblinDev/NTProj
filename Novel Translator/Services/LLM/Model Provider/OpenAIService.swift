@@ -1,31 +1,6 @@
 import Foundation
 import Tiktoken
 
-// MARK: - Custom Errors
-enum OpenAIError: LocalizedError {
-    case invalidAPIKey
-    case apiError(String)
-    case noResponseText
-    case invalidURL
-    case responseDecodingFailed(Error)
-    case modelFetchFailed(String)
-    case glossaryExtractionFailed(String)
-    case streamingError(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidAPIKey: "The provided OpenAI API Key is invalid or missing."
-        case .apiError(let message): "The API returned an error: \(message)"
-        case .noResponseText: "The API response did not contain any text."
-        case .invalidURL: "Could not create a valid URL for the OpenAI API endpoint."
-        case .responseDecodingFailed(let error): "Failed to decode the API response: \(error.localizedDescription)"
-        case .modelFetchFailed(let message): "Failed to fetch model list: \(message)"
-        case .glossaryExtractionFailed(let message): "Failed to extract glossary: \(message)"
-        case .streamingError(let message): "An error occurred during streaming: \(message)"
-        }
-    }
-}
-
 // MARK: - Codable Structs for API Communication
 
 // Request Payloads
@@ -94,6 +69,9 @@ private struct OpenAIModelInfo: Codable {
 class OpenAIService: LLMServiceProtocol {
     private let apiKey: String
     private let baseURL = "https://api.openai.com/v1"
+    private var headers: [String: String] {
+        ["Authorization": "Bearer \(apiKey)"]
+    }
 
     init(apiKey: String) {
         self.apiKey = apiKey
@@ -104,42 +82,21 @@ class OpenAIService: LLMServiceProtocol {
         guard !apiKey.isEmpty else { return [] }
         
         let endpoint = "https://api.openai.com/v1/models"
-        guard let url = URL(string: endpoint) else {
-            throw OpenAIError.invalidURL
-        }
+        let headers = ["Authorization": "Bearer \(apiKey)"]
         
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "GET"
-        urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        let decodedResponse: OpenAIModelsListResponse = try await LLMServiceHelper.performGETRequest(urlString: endpoint, headers: headers)
         
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        let filteredModels = decodedResponse.data
+            .filter { $0.id.hasPrefix("gpt-") && !$0.id.contains("vision") }
+            .map { $0.id }
+            .sorted()
         
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "No error details"
-            throw OpenAIError.modelFetchFailed("Status Code: \((response as? HTTPURLResponse)?.statusCode ?? 0). Body: \(errorBody)")
-        }
-        
-        do {
-            let decodedResponse = try JSONDecoder().decode(OpenAIModelsListResponse.self, from: data)
-            
-            // Filter for common, useful models and sort them
-            let filteredModels = decodedResponse.data
-                .filter { $0.id.hasPrefix("gpt-") && !$0.id.contains("vision") }
-                .map { $0.id }
-                .sorted()
-            
-            return filteredModels
-        } catch {
-            throw OpenAIError.responseDecodingFailed(error)
-        }
+        return filteredModels
     }
 
     // MARK: - Non-Streaming Translation
     func translate(request: TranslationRequest) async throws -> TranslationResponse {
-        guard let url = URL(string: "\(baseURL)/chat/completions") else {
-            throw OpenAIError.invalidURL
-        }
-
+        let urlString = "\(baseURL)/chat/completions"
         let payload = OpenAIRequestPayload(
             model: request.model,
             messages: [OpenAIMessage(role: "user", content: request.prompt)],
@@ -149,20 +106,14 @@ class OpenAIService: LLMServiceProtocol {
             response_format: nil
         )
 
-        let urlRequest = try buildURLRequest(url: url, payload: payload)
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        try handleResponseError(response: response, data: data)
-
-        let decodedResponse: OpenAIResponsePayload
-        do {
-            decodedResponse = try JSONDecoder().decode(OpenAIResponsePayload.self, from: data)
-        } catch {
-            throw OpenAIError.responseDecodingFailed(error)
-        }
+        let decodedResponse: OpenAIResponsePayload = try await LLMServiceHelper.performRequest(
+            urlString: urlString,
+            payload: payload,
+            headers: headers
+        )
 
         guard let text = decodedResponse.choices.first?.message.content else {
-            throw OpenAIError.noResponseText
+            throw LLMServiceError.noResponseText
         }
 
         return TranslationResponse(
@@ -179,10 +130,7 @@ class OpenAIService: LLMServiceProtocol {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    guard let url = URL(string: "\(baseURL)/chat/completions") else {
-                        throw OpenAIError.invalidURL
-                    }
-
+                    let urlString = "\(baseURL)/chat/completions"
                     let payload = OpenAIRequestPayload(
                         model: request.model,
                         messages: [OpenAIMessage(role: "user", content: request.prompt)],
@@ -192,11 +140,12 @@ class OpenAIService: LLMServiceProtocol {
                         response_format: nil
                     )
 
-                    let urlRequest = try buildURLRequest(url: url, payload: payload)
-                    let (bytes, response) = try await URLSession.shared.bytes(for: urlRequest)
+                    let (bytes, _) = try await LLMServiceHelper.performStreamingRequest(
+                        urlString: urlString,
+                        payload: payload,
+                        headers: headers
+                    )
                     
-                    try handleResponseError(response: response)
-
                     for try await line in bytes.lines {
                         if line.hasPrefix("data: ") {
                             let jsonString = line.dropFirst(6)
@@ -214,7 +163,7 @@ class OpenAIService: LLMServiceProtocol {
                                 
                                 let chunk = StreamingTranslationChunk(
                                     textChunk: choice?.delta.content ?? "",
-                                    inputTokens: nil, // OpenAI stream does not provide token counts per chunk
+                                    inputTokens: nil,
                                     outputTokens: nil,
                                     finishReason: choice?.finish_reason
                                 )
@@ -239,12 +188,9 @@ class OpenAIService: LLMServiceProtocol {
     
     // MARK: - Glossary Extraction
     func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
-        guard let url = URL(string: "\(baseURL)/chat/completions") else {
-            throw OpenAIError.invalidURL
-        }
-
+        let urlString = "\(baseURL)/chat/completions"
         let payload = OpenAIRequestPayload(
-            model: "gpt-4o", // Use a smart model for JSON mode
+            model: "gpt-4o",
             messages: [OpenAIMessage(role: "user", content: prompt)],
             temperature: 0.1,
             max_tokens: nil,
@@ -252,68 +198,35 @@ class OpenAIService: LLMServiceProtocol {
             response_format: .init(type: "json_object")
         )
 
-        let urlRequest = try buildURLRequest(url: url, payload: payload)
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-
-        try handleResponseError(response: response, data: data, forGlossary: true)
-
-        let decodedResponse: OpenAIResponsePayload
-        do {
-            decodedResponse = try JSONDecoder().decode(OpenAIResponsePayload.self, from: data)
-        } catch {
-            throw OpenAIError.responseDecodingFailed(error)
-        }
+        let decodedResponse: OpenAIResponsePayload = try await LLMServiceHelper.performRequest(
+            urlString: urlString,
+            payload: payload,
+            headers: headers
+        )
         
         guard let jsonText = decodedResponse.choices.first?.message.content else {
-            return [] // If the model returns nothing, assume no entries.
+            return []
         }
         
         guard let jsonData = jsonText.data(using: .utf8) else {
-            throw OpenAIError.responseDecodingFailed(URLError(.cannotDecodeContentData))
+            throw LLMServiceError.responseDecodingFailed(URLError(.cannotDecodeContentData))
         }
 
         do {
-            // Use the flexible shared wrapper. This will use the robust GlossaryEntry decoder internally.
             let wrapper = try JSONDecoder().decode(GlossaryResponseWrapper.self, from: jsonData)
             return wrapper.entries
         } catch {
-            throw OpenAIError.responseDecodingFailed(error)
+            throw LLMServiceError.responseDecodingFailed(error)
         }
     }
 
     // MARK: - Token Counting
     func countTokens(text: String, model: String) async throws -> Int {
         do {
-            //let encodingName = Model.getEncoding(model)?.name ?? "cl100k_base"
             let count = try await getTokenCount(for: text, model: model)
             return count
         } catch {
-            throw OpenAIError.apiError("Token counting failed via Tiktoken: \(error.localizedDescription)")
-        }
-    }
-
-    // MARK: - Private Helpers
-    private func buildURLRequest(url: URL, payload: some Encodable) throws -> URLRequest {
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.httpBody = try JSONEncoder().encode(payload)
-        return urlRequest
-    }
-    
-    private func handleResponseError(response: URLResponse, data: Data? = nil, forGlossary: Bool = false) throws {
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            var errorMessage = "Status Code: \(statusCode)."
-            if let data = data, let errorBody = String(data: data, encoding: .utf8) {
-                errorMessage += " Body: \(errorBody)"
-            }
-            if forGlossary {
-                throw OpenAIError.glossaryExtractionFailed(errorMessage)
-            } else {
-                throw OpenAIError.apiError(errorMessage)
-            }
+            throw LLMServiceError.serviceNotImplemented("Token counting failed via Tiktoken: \(error.localizedDescription)")
         }
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - Codable Structs for Translation (/generateContent)
+// MARK: - Codable Structs for Translation
 private struct GeminiRequestPayload: Codable {
     let contents: [Content]
     let safetySettings: [SafetySetting]
@@ -96,7 +96,7 @@ private struct ModelsListResponse: Codable {
 
 struct ModelInfo: Codable, Identifiable {
     var id: String { name }
-    let name: String // e.g., "models/gemini-1.5-pro-latest"
+    let name: String
     let displayName: String
     let supportedGenerationMethods: [String]
 }
@@ -111,34 +111,10 @@ private struct CountTokensResponsePayload: Codable {
 }
 
 
-// MARK: - Custom Errors
-enum GeminiError: LocalizedError {
-    case invalidAPIKey
-    case apiError(String)
-    case noResponseText
-    case invalidURL
-    case responseDecodingFailed(Error)
-    case modelFetchFailed(String)
-    case tokenCountFailed(String)
-    case glossaryExtractionFailed(String)
-    
-    var errorDescription: String? {
-        switch self {
-        case .invalidAPIKey: "The provided Google AI API Key is invalid or missing."
-        case .apiError(let message): "The API returned an error: \(message)"
-        case .noResponseText: "The API response did not contain any translated text."
-        case .invalidURL: "Could not create a valid URL for the Gemini API endpoint."
-        case .responseDecodingFailed(let error): "Failed to decode the API response: \(error.localizedDescription)"
-        case .modelFetchFailed(let message): "Failed to fetch model list: \(message)"
-        case .tokenCountFailed(let message): "Failed to count tokens: \(message)"
-        case .glossaryExtractionFailed(let message): "Failed to extract glossary: \(message)"
-        }
-    }
-}
-
 // MARK: - GoogleService Implementation
 class GoogleService: LLMServiceProtocol {
     private let apiKey: String
+    private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models"
     
     // Safety settings to disable all safety filters
     private let safetySettings = [
@@ -158,108 +134,60 @@ class GoogleService: LLMServiceProtocol {
         guard !apiKey.isEmpty else { return [] }
         
         let endpoint = "https://generativelanguage.googleapis.com/v1beta/models?key=\(apiKey)"
-        guard let url = URL(string: endpoint) else {
-            throw GeminiError.invalidURL
-        }
         
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let decodedResponse: ModelsListResponse = try await LLMServiceHelper.performGETRequest(urlString: endpoint, headers: [:])
         
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "No error details"
-            throw GeminiError.modelFetchFailed("Status Code: \((response as? HTTPURLResponse)?.statusCode ?? 0). Body: \(errorBody)")
-        }
+        let filteredModels = decodedResponse.models
+            .filter { $0.supportedGenerationMethods.contains("generateContent") }
+            .map { $0.name.replacingOccurrences(of: "models/", with: "") }
+            .sorted()
         
-        do {
-            let decodedResponse = try JSONDecoder().decode(ModelsListResponse.self, from: data)
-            
-            let filteredModels = decodedResponse.models
-                .filter { $0.supportedGenerationMethods.contains("generateContent") }
-                .map { $0.name.replacingOccurrences(of: "models/", with: "") } // Return just the name, e.g., "gemini-1.5-pro-latest"
-                .sorted()
-            
-            return filteredModels
-        } catch {
-            throw GeminiError.responseDecodingFailed(error)
-        }
+        return filteredModels
     }
 
     // MARK: - Token Counting
     func countTokens(text: String, model: String) async throws -> Int {
-        guard !apiKey.isEmpty else { throw GeminiError.invalidAPIKey }
+        guard !apiKey.isEmpty else { throw LLMServiceError.apiKeyMissing("Google") }
         
-        let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):countTokens?key=\(apiKey)"
-        
-        guard let url = URL(string: endpoint) else { throw GeminiError.invalidURL }
-        
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // The payload for counting without safety settings
+        let urlString = "\(baseURL)/\(model):countTokens?key=\(apiKey)"
         let requestPayload = CountTokensRequestPayload(
             contents: [.init(parts: [.init(text: text)])]
         )
-        urlRequest.httpBody = try JSONEncoder().encode(requestPayload)
         
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "No error details"
-            throw GeminiError.tokenCountFailed("Status Code: \((response as? HTTPURLResponse)?.statusCode ?? 0). Body: \(errorBody)")
-        }
-        
-        do {
-            let decodedResponse = try JSONDecoder().decode(CountTokensResponsePayload.self, from: data)
-            return decodedResponse.totalTokens
-        } catch {
-            throw GeminiError.responseDecodingFailed(error)
-        }
+        let decodedResponse: CountTokensResponsePayload = try await LLMServiceHelper.performRequest(
+            urlString: urlString,
+            payload: requestPayload,
+            headers: [:]
+        )
+        return decodedResponse.totalTokens
     }
     
     // MARK: - Non-Streaming Translation
     func translate(request: TranslationRequest) async throws -> TranslationResponse {
-        guard !apiKey.isEmpty else { throw GeminiError.invalidAPIKey }
+        guard !apiKey.isEmpty else { throw LLMServiceError.apiKeyMissing("Google") }
         
-        let model = request.model
-        let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
-        
-        guard let url = URL(string: endpoint) else {
-            throw GeminiError.invalidURL
-        }
-        
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let urlString = "\(baseURL)/\(request.model):generateContent?key=\(apiKey)"
         
         let requestPayload = GeminiRequestPayload(
             contents: [.init(parts: [.init(text: request.prompt)])],
             safetySettings: safetySettings
         )
-        urlRequest.httpBody = try JSONEncoder().encode(requestPayload)
         
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "No error details"
-            throw GeminiError.apiError("Status Code: \((response as? HTTPURLResponse)?.statusCode ?? 0). Body: \(errorBody)")
-        }
-        
-        let decodedResponse: GeminiResponsePayload
-        do {
-            decodedResponse = try JSONDecoder().decode(GeminiResponsePayload.self, from: data)
-        } catch {
-            throw GeminiError.responseDecodingFailed(error)
-        }
+        let decodedResponse: GeminiResponsePayload = try await LLMServiceHelper.performRequest(
+            urlString: urlString,
+            payload: requestPayload,
+            headers: [:]
+        )
         
         guard let translatedText = decodedResponse.candidates.first?.content?.parts.first?.text else {
-            throw GeminiError.noResponseText
+            throw LLMServiceError.noResponseText
         }
         
         return TranslationResponse(
             translatedText: translatedText,
             inputTokens: decodedResponse.usageMetadata?.promptTokenCount,
             outputTokens: decodedResponse.usageMetadata?.candidatesTokenCount,
-            modelUsed: model,
+            modelUsed: request.model,
             finishReason: decodedResponse.candidates.first?.finishReason
         )
     }
@@ -269,36 +197,22 @@ class GoogleService: LLMServiceProtocol {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    guard !apiKey.isEmpty else { throw GeminiError.invalidAPIKey }
+                    guard !apiKey.isEmpty else { throw LLMServiceError.apiKeyMissing("Google") }
                     
-                    let model = request.model
-                    // NOTE: The endpoint path and query parameter are different for streaming
-                    let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):streamGenerateContent?key=\(apiKey)&alt=sse"
-                    
-                    guard let url = URL(string: endpoint) else {
-                        throw GeminiError.invalidURL
-                    }
-                    
-                    var urlRequest = URLRequest(url: url)
-                    urlRequest.httpMethod = "POST"
-                    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    let urlString = "\(baseURL)/\(request.model):streamGenerateContent?key=\(apiKey)&alt=sse"
                     
                     let requestPayload = GeminiRequestPayload(
                         contents: [.init(parts: [.init(text: request.prompt)])],
                         safetySettings: safetySettings
                     )
-                    urlRequest.httpBody = try JSONEncoder().encode(requestPayload)
                     
-                    // Use URLSession's async bytes stream
-                    let (bytes, response) = try await URLSession.shared.bytes(for: urlRequest)
+                    let (bytes, _) = try await LLMServiceHelper.performStreamingRequest(
+                        urlString: urlString,
+                        payload: requestPayload,
+                        headers: [:]
+                    )
                     
-                    guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                        throw GeminiError.apiError("Invalid response: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
-                    }
-                    
-                    // Process each line from the Server-Sent Events stream
                     for try await line in bytes.lines {
-                        // SSE format is "data: { ...JSON... }"
                         if line.hasPrefix("data: ") {
                             let jsonString = line.dropFirst(6)
                             guard let jsonData = jsonString.data(using: .utf8) else { continue }
@@ -316,19 +230,16 @@ class GoogleService: LLMServiceProtocol {
                                 )
                                 continuation.yield(chunk)
                                 
-                                // If this is the final chunk, end the stream.
                                 if chunk.isFinal {
                                     continuation.finish()
                                     return
                                 }
                                 
                             } catch {
-                                // This might catch errors on intermediate, non-final JSON chunks
                                 print("Streaming decode error on a chunk: \(error)")
                             }
                         }
                     }
-                    // If the loop finishes without a "finishReason", we finish manually.
                     continuation.finish()
                     
                 } catch {
@@ -340,19 +251,11 @@ class GoogleService: LLMServiceProtocol {
     
     // MARK: - Glossary Extraction
     func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
-        guard !apiKey.isEmpty else { throw GeminiError.invalidAPIKey }
+        guard !apiKey.isEmpty else { throw LLMServiceError.apiKeyMissing("Google") }
         
-        // Use a model that supports JSON mode well, like 1.5 Flash or Pro.
         let model = "gemini-1.5-flash-latest"
-        let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
+        let urlString = "\(baseURL)/\(model):generateContent?key=\(apiKey)"
         
-        guard let url = URL(string: endpoint) else { throw GeminiError.invalidURL }
-        
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // Define the JSON schema for the response
         let schema = GeminiGlossaryRequestPayload.Schema(
             items: .init(
                 properties: [
@@ -379,40 +282,25 @@ class GoogleService: LLMServiceProtocol {
             generationConfig: generationConfig
         )
         
-        urlRequest.httpBody = try JSONEncoder().encode(requestPayload)
+        let decodedResponse: GeminiResponsePayload = try await LLMServiceHelper.performRequest(
+            urlString: urlString,
+            payload: requestPayload,
+            headers: [:]
+        )
         
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "No error details"
-            throw GeminiError.glossaryExtractionFailed("Status Code: \((response as? HTTPURLResponse)?.statusCode ?? 0). Body: \(errorBody)")
-        }
-        
-        let decodedResponse: GeminiResponsePayload
-        do {
-            decodedResponse = try JSONDecoder().decode(GeminiResponsePayload.self, from: data)
-        } catch {
-            throw GeminiError.responseDecodingFailed(error)
-        }
-        
-        guard let jsonText = decodedResponse.candidates.first?.content?.parts.first?.text else {
-            return []
-        }
-        
-        if jsonText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        guard let jsonText = decodedResponse.candidates.first?.content?.parts.first?.text, !jsonText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return []
         }
         
         guard let jsonData = jsonText.data(using: .utf8) else {
-            throw GeminiError.responseDecodingFailed(URLError(.cannotDecodeContentData))
+            throw LLMServiceError.responseDecodingFailed(URLError(.cannotDecodeContentData))
         }
         
         do {
-            // Use the flexible shared wrapper. This will use the robust GlossaryEntry decoder internally.
             let wrapper = try JSONDecoder().decode(GlossaryResponseWrapper.self, from: jsonData)
             return wrapper.entries
         } catch {
-            throw GeminiError.responseDecodingFailed(error)
+            throw LLMServiceError.responseDecodingFailed(error)
         }
     }
 }

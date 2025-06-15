@@ -7,25 +7,13 @@
 
 import Foundation
 
-enum LLMFactoryError: LocalizedError {
-    case apiKeyNotFound(String)
-    case serviceNotImplemented(String)
-    
-    var errorDescription: String? {
-        switch self {
-        case .apiKeyNotFound(let provider):
-            return "API Key for \(provider) not found in Keychain. Please set it in Project Settings."
-        case .serviceNotImplemented(let provider):
-            return "The translation service for \(provider) is not yet implemented."
-        }
-    }
-}
+// The old LLMFactoryError is now replaced by the shared LLMServiceError.
 
 class LLMServiceFactory {
     static func create(provider: APIConfiguration.APIProvider, config: APIConfiguration) throws -> LLMServiceProtocol {
         
-        guard let apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier) else {
-            throw LLMFactoryError.apiKeyNotFound(provider.displayName)
+        guard let apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier), !apiKey.isEmpty else {
+            throw LLMServiceError.apiKeyMissing(provider.displayName)
         }
 
         switch provider {

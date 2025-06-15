@@ -25,15 +25,15 @@ protocol LLMServiceProtocol {
 extension LLMServiceProtocol {
      func streamTranslate(request: TranslationRequest) -> AsyncThrowingStream<StreamingTranslationChunk, Error> {
         return AsyncThrowingStream { continuation in
-            continuation.finish(throwing: LLMFactoryError.serviceNotImplemented("Streaming for this provider"))
+            continuation.finish(throwing: LLMServiceError.serviceNotImplemented("Streaming for this provider"))
         }
     }
 
     func countTokens(text: String, model: String) async throws -> Int {
-        throw LLMFactoryError.serviceNotImplemented("Token counting for this provider")
+        throw LLMServiceError.serviceNotImplemented("Token counting for this provider")
     }
     
     func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
-        throw LLMFactoryError.serviceNotImplemented("Glossary extraction for this provider")
+        throw LLMServiceError.serviceNotImplemented("Glossary extraction for this provider")
     }
 }
