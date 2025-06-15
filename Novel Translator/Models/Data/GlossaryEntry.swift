@@ -48,4 +48,26 @@ struct GlossaryEntry: Codable, Identifiable, Hashable {
         self.contextDescription = contextDescription
         self.aliases = aliases
     }
+
+    // MARK: - Custom Codable Initializer for Robustness
+    enum CodingKeys: String, CodingKey {
+        case id, originalTerm, translation, category, contextDescription, usageCount, isActive, createdDate, lastUsedDate, aliases
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Use defaults for fields that the AI might not provide.
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        originalTerm = try container.decode(String.self, forKey: .originalTerm)
+        translation = try container.decode(String.self, forKey: .translation)
+        category = try container.decode(GlossaryCategory.self, forKey: .category)
+        contextDescription = try container.decodeIfPresent(String.self, forKey: .contextDescription) ?? ""
+        usageCount = try container.decodeIfPresent(Int.self, forKey: .usageCount) ?? 0
+        isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
+        createdDate = try container.decodeIfPresent(Date.self, forKey: .createdDate) ?? Date()
+        lastUsedDate = try container.decodeIfPresent(Date.self, forKey: .lastUsedDate)
+        // CRITICAL: Default aliases to an empty array if not present in the JSON.
+        aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
+    }
 }

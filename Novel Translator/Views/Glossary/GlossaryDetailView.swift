@@ -4,6 +4,7 @@ typealias GlossaryCategory = GlossaryEntry.GlossaryCategory
 
 struct GlossaryDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var projectManager: ProjectManager
     
     @Binding var entry: GlossaryEntry
     @ObservedObject var project: TranslationProject
@@ -113,10 +114,13 @@ struct GlossaryDetailView: View {
             self.entry = updatedEntry
         }
         project.lastModifiedDate = Date()
+        projectManager.saveProject()
     }
     
     private func deleteEntry() {
         project.glossaryEntries.removeAll { $0.id == entry.id }
+        project.lastModifiedDate = Date()
+        projectManager.saveProject()
         dismiss()
     }
 }

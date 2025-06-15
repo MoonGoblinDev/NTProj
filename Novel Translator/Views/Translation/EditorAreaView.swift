@@ -24,6 +24,7 @@ struct EditorAreaView: View {
     @State private var searchViewModel = EditorSearchViewModel()
     @State private var isEditorSearchActive = false
     @State private var isConfigPopoverShown = false
+    @State private var isGlossaryExtractionPresented = false
     
     // Computed Properties
     private var activeChapter: Chapter? {
@@ -38,6 +39,11 @@ struct EditorAreaView: View {
         guard let state = activeEditorState else { return true }
         // Use the explicit String initializer to get the content reliably.
         return String(state.sourceAttributedText.characters).isEmpty
+    }
+    
+    private var isTranslatedTextEmpty: Bool {
+        guard let state = activeEditorState else { return true }
+        return String(state.translatedAttributedText.characters).isEmpty
     }
 
     var body: some View {
@@ -83,6 +89,15 @@ struct EditorAreaView: View {
             .onChange(of: glossaryMatches) {
                 reapplyAllHighlights()
             }
+            .sheet(isPresented: $isGlossaryExtractionPresented) {
+                if let chapterID = activeChapter?.id {
+                    GlossaryExtractionView(
+                        project: project,
+                        projectManager: projectManager,
+                        currentChapterID: chapterID
+                    )
+                }
+            }
         } else {
             ContentUnavailableView(
                 "No Chapter Selected",
@@ -110,6 +125,7 @@ struct EditorAreaView: View {
                 HStack {
                     Spacer()
                     configButton
+                    extractGlossaryButton
                     promptPreviewButton(chapter: chapter)
                     translateButton(chapter: chapter)
                 }
@@ -142,6 +158,21 @@ struct EditorAreaView: View {
         .onHover { isHovering in
             if isHovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
         }
+    }
+    
+    private var extractGlossaryButton: some View {
+        Button {
+            isGlossaryExtractionPresented.toggle()
+        } label: {
+            Label("Extract Glossary", systemImage: "wand.and.stars")
+        }
+        .tint(.gray)
+        .buttonStyle(.borderedProminent)
+        .help("Automatically extract potential new glossary terms from the source and translation text.")
+        .onHover { isHovering in
+            if isHovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .disabled(isSourceTextEmpty || isTranslatedTextEmpty)
     }
     
     private func promptPreviewButton(chapter: Chapter) -> some View {

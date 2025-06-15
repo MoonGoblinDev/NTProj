@@ -16,6 +16,9 @@ protocol LLMServiceProtocol {
     
     // Method to get token count from the provider's API.
     func countTokens(text: String, model: String) async throws -> Int
+    
+    // Method to extract glossary terms from text, returning structured JSON.
+    func extractGlossary(prompt: String) async throws -> [GlossaryEntry]
 }
 
 // Default implementation to make the new method optional for older services.
@@ -28,5 +31,9 @@ extension LLMServiceProtocol {
 
     func countTokens(text: String, model: String) async throws -> Int {
         throw LLMFactoryError.serviceNotImplemented("Token counting for this provider")
+    }
+    
+    func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
+        throw LLMFactoryError.serviceNotImplemented("Glossary extraction for this provider")
     }
 }

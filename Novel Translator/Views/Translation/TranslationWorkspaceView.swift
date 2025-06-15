@@ -174,6 +174,7 @@ struct TranslationWorkspaceView: View {
             if let entry = entryToDisplay, let index = project.glossaryEntries.firstIndex(where: { $0.id == entry.id }) {
                 NavigationStack {
                     GlossaryDetailView(entry: $project.glossaryEntries[index], project: project, isCreating: false)
+                        .environmentObject(projectManager)
                 }
             } else {
                 Text("Error: Could not find glossary item.").padding()

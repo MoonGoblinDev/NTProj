@@ -43,6 +43,52 @@ private struct GeminiResponsePayload: Codable {
     }
 }
 
+// MARK: - Codable Structs for Glossary Extraction (JSON Mode)
+private struct GeminiGlossaryRequestPayload: Encodable {
+    let contents: [GeminiRequestPayload.Content]
+    let safetySettings: [GeminiRequestPayload.SafetySetting]
+    let generationConfig: GenerationConfig
+    
+    struct GenerationConfig: Encodable {
+        let responseMimeType: String
+        let responseSchema: Schema
+        
+        enum CodingKeys: String, CodingKey {
+            case responseMimeType = "response_mime_type"
+            case responseSchema = "response_schema"
+        }
+    }
+    
+    struct Schema: Encodable {
+        let type = "array"
+        let items: ItemsSchema
+    }
+    
+    struct ItemsSchema: Encodable {
+        let type = "object"
+        let properties: [String: Property]
+        let required = ["originalTerm", "translation", "category", "contextDescription"]
+    }
+    
+    struct Property: Encodable {
+        let type: String
+        let description: String?
+        let `enum`: [String]?
+
+        init(type: String, description: String? = nil, `enum`: [String]? = nil) {
+            self.type = type
+            self.description = description
+            self.`enum` = `enum`
+        }
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case contents, safetySettings
+        case generationConfig = "generation_config"
+    }
+}
+
+
 // MARK: - Codable Structs for Model Listing (/models)
 private struct ModelsListResponse: Codable {
     let models: [ModelInfo]
@@ -74,6 +120,7 @@ enum GeminiError: LocalizedError {
     case responseDecodingFailed(Error)
     case modelFetchFailed(String)
     case tokenCountFailed(String)
+    case glossaryExtractionFailed(String)
     
     var errorDescription: String? {
         switch self {
@@ -84,6 +131,7 @@ enum GeminiError: LocalizedError {
         case .responseDecodingFailed(let error): "Failed to decode the API response: \(error.localizedDescription)"
         case .modelFetchFailed(let message): "Failed to fetch model list: \(message)"
         case .tokenCountFailed(let message): "Failed to count tokens: \(message)"
+        case .glossaryExtractionFailed(let message): "Failed to extract glossary: \(message)"
         }
     }
 }
@@ -287,6 +335,89 @@ class GoogleService: LLMServiceProtocol {
                     continuation.finish(throwing: error)
                 }
             }
+        }
+    }
+    
+    // MARK: - Glossary Extraction
+    func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
+        guard !apiKey.isEmpty else { throw GeminiError.invalidAPIKey }
+        
+        // Use a model that supports JSON mode well, like 1.5 Flash or Pro.
+        let model = "gemini-1.5-flash-latest"
+        let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)"
+        
+        guard let url = URL(string: endpoint) else { throw GeminiError.invalidURL }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Define the JSON schema for the response
+        let schema = GeminiGlossaryRequestPayload.Schema(
+            items: .init(
+                properties: [
+                    "originalTerm": .init(type: "string", description: "The term in the source language."),
+                    "translation": .init(type: "string", description: "The term translated into the target language."),
+                    "category": .init(
+                        type: "string",
+                        description: "The category of the term.",
+                        enum: GlossaryEntry.GlossaryCategory.allCases.map { $0.rawValue }
+                    ),
+                    "contextDescription": .init(type: "string", description: "A brief explanation of the term's context or meaning in the story.")
+                ]
+            )
+        )
+
+        let generationConfig = GeminiGlossaryRequestPayload.GenerationConfig(
+            responseMimeType: "application/json",
+            responseSchema: schema
+        )
+        
+        let requestPayload = GeminiGlossaryRequestPayload(
+            contents: [.init(parts: [.init(text: prompt)])],
+            safetySettings: safetySettings,
+            generationConfig: generationConfig
+        )
+        
+        urlRequest.httpBody = try JSONEncoder().encode(requestPayload)
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "No error details"
+            throw GeminiError.glossaryExtractionFailed("Status Code: \((response as? HTTPURLResponse)?.statusCode ?? 0). Body: \(errorBody)")
+        }
+        
+        let decodedResponse: GeminiResponsePayload
+        do {
+            decodedResponse = try JSONDecoder().decode(GeminiResponsePayload.self, from: data)
+        } catch {
+            throw GeminiError.responseDecodingFailed(error)
+        }
+        
+        guard let jsonText = decodedResponse.candidates.first?.content?.parts.first?.text else {
+            // If there's no text part at all, it's safer to assume no entries were found.
+            // This could happen if the model's response is blocked or empty.
+            return []
+        }
+        
+        // FIX: If the model returns an empty string instead of an empty JSON array "[]",
+        // treat it as "no entries found" and return an empty array to prevent a crash.
+        if jsonText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return []
+        }
+        
+        // The response text is a JSON string, so we need to decode it again.
+        guard let jsonData = jsonText.data(using: .utf8) else {
+            throw GeminiError.responseDecodingFailed(URLError(.cannotDecodeContentData))
+        }
+        
+        do {
+            let jsonDecoder = JSONDecoder()
+            let extractedEntries = try jsonDecoder.decode([GlossaryEntry].self, from: jsonData)
+            return extractedEntries
+        } catch {
+            throw GeminiError.responseDecodingFailed(error)
         }
     }
 }

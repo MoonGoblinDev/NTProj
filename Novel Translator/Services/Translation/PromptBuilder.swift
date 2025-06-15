@@ -56,6 +56,73 @@ class PromptBuilder {
         return promptComponents.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    func buildGlossaryExtractionPrompt(
+        sourceText: String,
+        translatedText: String,
+        existingGlossary: [GlossaryEntry],
+        sourceLanguage: String,
+        targetLanguage: String,
+        categoriesToExtract: [GlossaryEntry.GlossaryCategory],
+        additionalQuery: String,
+        fillContext: Bool
+    ) -> String {
+        let existingGlossaryText = existingGlossary
+            .map { "- \($0.originalTerm) -> \($0.translation)" }
+            .joined(separator: "\n")
+
+        var instructions = """
+        You are a linguistic expert tasked with expanding a glossary for a novel translation project. Analyze the provided source text and its professional translation. Identify new, important, or recurring terms (such as characters, places, special abilities, items, or concepts) that are NOT already in the existing glossary list.
+        
+        For each new term you identify, provide its original form from the source text, its corresponding translation from the translated text, an appropriate category, and a brief, one-sentence description of its context within the story.
+        
+        ---
+        
+        **CRITICAL INSTRUCTIONS:**
+        1.  **DO NOT** extract terms that are already present in the "Existing Glossary" list.
+        2.  Focus on proper nouns, unique concepts, or recurring objects. Avoid common words.
+        3.  The `contextDescription` should be concise and based *only* on the provided texts.
+        4.  You **MUST** return your findings as a JSON array of objects.
+        """
+        
+        if categoriesToExtract.count < GlossaryEntry.GlossaryCategory.allCases.count {
+            let categoryList = categoriesToExtract.map { $0.rawValue }.joined(separator: ", ")
+            instructions += "\n5.  Only extract terms belonging to the following categories: \(categoryList)."
+        }
+        
+        if !fillContext {
+            instructions += "\n6.  The `contextDescription` field for all extracted items **MUST** be an empty string."
+        }
+        
+        if !additionalQuery.isEmpty {
+            instructions += "\n7.  Follow this additional instruction carefully: \(additionalQuery)"
+        }
+
+        let prompt = """
+        \(instructions)
+        
+        ---
+        
+        **EXISTING GLOSSARY (DO NOT EXTRACT THESE):**
+        \(existingGlossaryText.isEmpty ? "None" : existingGlossaryText)
+        
+        ---
+        
+        **SOURCE TEXT (\(sourceLanguage)):**
+        \(sourceText)
+        
+        ---
+        
+        **TRANSLATED TEXT (\(targetLanguage)):**
+        \(translatedText)
+        
+        ---
+        
+        Now, provide the JSON array of new glossary entries.
+        """
+        
+        return prompt
+    }
+
     /// Public method to clean the LLM's output if line-syncing was used.
     public func postprocessLineSync(text: String) -> String {
         return postprocessTextForLineSync(text: text)

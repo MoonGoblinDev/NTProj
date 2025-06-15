@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GlossaryView: View {
     @ObservedObject var project: TranslationProject
+    @EnvironmentObject private var projectManager: ProjectManager
 
     @State private var entryToEdit: GlossaryEntry?
     
@@ -54,6 +55,7 @@ struct GlossaryView: View {
             // Find the index of the entry to create a binding to it.
             if let index = project.glossaryEntries.firstIndex(where: { $0.id == entry.id }) {
                 GlossaryDetailView(entry: $project.glossaryEntries[index], project: project, isCreating: false)
+                    .environmentObject(projectManager)
             }
         }
     }
@@ -61,5 +63,7 @@ struct GlossaryView: View {
     private func delete(at offsets: IndexSet) {
         let idsToDelete = offsets.map { sortedEntries[$0].id }
         project.glossaryEntries.removeAll { idsToDelete.contains($0.id) }
+        project.lastModifiedDate = Date()
+        projectManager.saveProject()
     }
 }

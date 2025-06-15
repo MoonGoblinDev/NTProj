@@ -3,6 +3,7 @@ import SwiftUI
 struct SidebarActionsView: View {
     @Binding var selectedTab: SidebarTab
     @ObservedObject var project: TranslationProject // To pass to sheets
+    @EnvironmentObject private var projectManager: ProjectManager
     
     // State for presenting sheets
     @State private var isImporterPresented = false
@@ -41,6 +42,7 @@ struct SidebarActionsView: View {
         .sheet(isPresented: $isAddGlossaryPresented) {
             // Pass the project object and a binding to the new entry struct
             GlossaryDetailView(entry: $newGlossaryEntry, project: project, isCreating: true)
+                .environmentObject(projectManager)
         }
     }
 }
