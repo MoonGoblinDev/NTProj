@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Tiktoken
 
 // MARK: - Custom Errors
 enum DeepseekError: LocalizedError {
@@ -287,9 +288,14 @@ class DeepseekService: LLMServiceProtocol {
         }
     }
 
-    // MARK: - Token Counting (Not Implemented)
+    // MARK: - Token Counting
     func countTokens(text: String, model: String) async throws -> Int {
-        throw LLMFactoryError.serviceNotImplemented("Token counting for Deepseek (requires client-side library)")
+        do {
+            let count = try await getTokenCount(for: text, model: "gpt-4")
+            return count
+        } catch {
+            throw DeepseekError.apiError("Token counting failed via Tiktoken: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Private Helpers

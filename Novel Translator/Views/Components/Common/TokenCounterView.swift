@@ -18,10 +18,7 @@ struct TokenCounterView: View {
 
     var body: some View {
         Group {
-            if viewModel.isLoading {
-                ProgressView()
-                    .scaleEffect(0.7)
-            } else if viewModel.isRealCount {
+            if viewModel.isRealCount {
                 realCountView
             } else {
                 estimatedCountView
@@ -50,12 +47,14 @@ struct TokenCounterView: View {
             }
             Text("\(viewModel.tokenCount) tokens")
         }
+        .help(viewModel.errorMessage ?? "An exact token count.")
+        .foregroundColor(viewModel.errorMessage != nil ? .red : .secondary)
     }
     
     @ViewBuilder
     private var estimatedCountView: some View {
         HStack(spacing: 4) {
-            if isHovering {
+            if isHovering && canRetryForAPI {
                 Button(action: viewModel.retry) {
                     Label("Get real token count", systemImage: "arrow.clockwise.circle")
                 }
@@ -63,15 +62,45 @@ struct TokenCounterView: View {
                 .help("Get real token count from \(projectManager.settings.selectedProvider?.displayName ?? "provider")")
             }
             else{
-                Text("~ \(viewModel.tokenCount) tokens")
+                if viewModel.isLoading {
+                    Text("Calculating tokens")
+                }
+                else{
+                    Text("~ \(viewModel.tokenCount) tokens")
+                }
+                
             }
         }
         .onHover { hovering in
-            withAnimation(.easeInOut) {
+            withAnimation(.easeInOut(duration: 0.1)) {
                 self.isHovering = hovering
             }
         }
-        .help(viewModel.errorMessage ?? "An estimated token count based on word count.")
+        .help(helpText)
         .foregroundColor(viewModel.errorMessage != nil ? .red : .secondary)
+    }
+    
+    private var canRetryForAPI: Bool {
+        guard let provider = projectManager.settings.selectedProvider else { return false }
+        return provider == .google || provider == .anthropic
+    }
+    
+    private var helpText: String {
+        if let error = viewModel.errorMessage {
+            return error
+        }
+        
+        guard let provider = projectManager.settings.selectedProvider else {
+            return "An estimated token count."
+        }
+        
+        switch provider {
+        case .deepseek:
+            return "An estimated token count (via Tiktoken)."
+        case .google, .anthropic:
+            return "An estimated token count. A more accurate count will be fetched from the API."
+        default:
+            return "An estimated token count."
+        }
     }
 }

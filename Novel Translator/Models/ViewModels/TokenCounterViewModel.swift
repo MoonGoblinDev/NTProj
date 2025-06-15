@@ -1,4 +1,5 @@
 import SwiftUI
+import Tiktoken
 
 @MainActor
 @Observable
@@ -24,36 +25,12 @@ class TokenCounterViewModel {
     func updateText(_ newText: String) {
         self.textToCount = newText
         
-        // Always provide an immediate fallback estimate
-        self.tokenCount = newText.estimateTokens()
-        self.isRealCount = false
-        self.isLoading = false
-        self.errorMessage = nil
-        
         // Cancel any previous debouncing task
         debounceTask?.cancel()
         
-        // Only start the debounced task if auto-counting is enabled
-        guard autoCount else { return }
-        
-        // Don't bother with API calls for empty text or if no API key is set for the provider
-        guard !newText.isEmpty, let config = settings.apiConfigurations.first(where: { $0.provider == settings.selectedProvider }),
-              let apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier), !apiKey.isEmpty else {
-            return
-        }
-        
-        // Start a new debounced task
-        debounceTask = Task {
-            do {
-                // Wait for 500ms after the last keystroke
-                try await Task.sleep(for: .milliseconds(500))
-                
-                // If the task wasn't cancelled, proceed with the API call
-                await fetchRealTokenCount()
-                
-            } catch {
-                // This catch block handles the Task.sleep cancellation
-            }
+        // Immediately start a task to get a count (either real or estimated)
+        Task {
+            await self.updateCount(for: newText)
         }
     }
     
@@ -61,24 +38,106 @@ class TokenCounterViewModel {
     func retry() {
         debounceTask?.cancel()
         guard !textToCount.isEmpty else { return }
-        Task {
-            await fetchRealTokenCount()
+        
+        guard let provider = settings.selectedProvider else { return }
+
+        switch provider {
+        case .openai, .deepseek:
+            // For local counters, "retry" just recalculates.
+            Task { await self.updateCount(for: textToCount) }
+        case .google, .anthropic:
+            // For API counters, "retry" fetches from the API now.
+            Task { await fetchRealTokenCountFromAPI() }
         }
     }
 
     /// Call this when the model or settings change
     func settingsDidChange(newSettings: AppSettings) {
         self.settings = newSettings
-        retry()
+        // Re-trigger the counting logic with the new settings.
+        updateText(textToCount)
     }
     
-    private func fetchRealTokenCount() async {
+    private func updateCount(for text: String) async {
+        // Reset state for every new update
+        self.isLoading = false
+        self.errorMessage = nil
+
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            self.tokenCount = 0
+            self.isRealCount = true // 0 is an exact count
+            return
+        }
+
+        guard let provider = settings.selectedProvider else {
+            self.tokenCount = 0
+            self.isRealCount = false
+            return
+        }
+
+        switch provider {
+        case .openai:
+            // For OpenAI, Tiktoken is the real count and it's fast.
+            do {
+                self.tokenCount = try await countWithTiktoken(text: text, model: settings.selectedModel)
+                self.isRealCount = true
+            } catch {
+                self.errorMessage = error.localizedDescription
+                self.tokenCount = 0
+                self.isRealCount = false
+            }
+
+        case .deepseek:
+            // For Deepseek, Tiktoken is an estimate, but it's the best we can do locally.
+            do {
+                // Use a default gpt-4 model for encoding as it's compatible
+                self.tokenCount = try await countWithTiktoken(text: text, model: "gpt-4")
+                self.isRealCount = false // It's an estimate
+            } catch {
+                self.errorMessage = error.localizedDescription
+                self.tokenCount = 0
+                self.isRealCount = false
+            }
+
+        case .google, .anthropic:
+            // Set an initial estimate using Tiktoken, then fetch real count from API.
+            do {
+                self.tokenCount = try await countWithTiktoken(text: text, model: "gpt-4") // A general estimate
+                self.isRealCount = false
+            } catch {
+                self.tokenCount = 0
+                self.isRealCount = false
+            }
+            
+            // Only start the debounced API call if auto-counting is enabled.
+            guard autoCount,
+                  let config = settings.apiConfigurations.first(where: { $0.provider == provider }),
+                  let apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier), !apiKey.isEmpty else {
+                return
+            }
+            
+            debounceTask = Task {
+                do {
+                    try await Task.sleep(for: .milliseconds(500))
+                    await fetchRealTokenCountFromAPI()
+                } catch { /* Task cancelled */ }
+            }
+        }
+    }
+    
+    /// Helper to get count using Tiktoken.
+    private func countWithTiktoken(text: String, model: String) async throws -> Int {
+        let count = try await getTokenCount(for: text, model: model)
+        return count
+    }
+    
+    private func fetchRealTokenCountFromAPI() async {
         isLoading = true
         errorMessage = nil
 
         do {
             guard let provider = settings.selectedProvider else {
-                throw URLError(.userAuthenticationRequired) // Or a more specific error
+                throw URLError(.userAuthenticationRequired)
             }
             guard let config = settings.apiConfigurations.first(where: { $0.provider == provider }) else {
                  throw URLError(.userAuthenticationRequired)

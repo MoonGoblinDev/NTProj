@@ -1,4 +1,5 @@
 import Foundation
+import Tiktoken
 
 // MARK: - Custom Errors
 enum OpenAIError: LocalizedError {
@@ -280,9 +281,15 @@ class OpenAIService: LLMServiceProtocol {
         }
     }
 
-    // MARK: - Token Counting (Not Implemented)
+    // MARK: - Token Counting
     func countTokens(text: String, model: String) async throws -> Int {
-        throw LLMFactoryError.serviceNotImplemented("Token counting for OpenAI (requires client-side library)")
+        do {
+            //let encodingName = Model.getEncoding(model)?.name ?? "cl100k_base"
+            let count = try await getTokenCount(for: text, model: model)
+            return count
+        } catch {
+            throw OpenAIError.apiError("Token counting failed via Tiktoken: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Private Helpers
