@@ -201,46 +201,12 @@ fileprivate struct OpenAISettingsView: View {
 
 fileprivate struct AnthropicSettingsView: View {
     @Binding var config: APIConfiguration
-    @State private var apiKey: String = ""
 
     var body: some View {
-        Form {
-            Section("API Key") {
-                SecureField("Stored in Keychain", text: $apiKey)
-                    .onChange(of: apiKey) { _, newValue in
-                        KeychainHelper.save(key: config.apiKeyIdentifier, stringValue: newValue)
-                    }
-            }
-            
-            Section("Enabled Models (Default List)") {
-                Text("Model fetching for Anthropic is not yet implemented.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                List(config.provider.defaultModels, id: \.self) { modelName in
-                    Toggle(modelName, isOn: bindingFor(model: modelName))
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("Anthropic Settings")
-        .onAppear {
-            self.apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier) ?? ""
-        }
-    }
-
-    private func bindingFor(model modelName: String) -> Binding<Bool> {
-        Binding<Bool>(
-            get: { self.config.enabledModels.contains(modelName) },
-            set: { isEnabled in
-                if isEnabled {
-                    if !config.enabledModels.contains(modelName) {
-                        config.enabledModels.append(modelName); config.enabledModels.sort()
-                    }
-                } else {
-                    config.enabledModels.removeAll { $0 == modelName }
-                }
-            }
+        ProviderSettingsBaseView(
+            title: "Anthropic (Claude) Settings",
+            config: $config,
+            fetcher: AnthropicService.fetchAvailableModels
         )
     }
 }

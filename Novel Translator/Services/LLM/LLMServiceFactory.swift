@@ -34,7 +34,7 @@ class LLMServiceFactory {
         case .openai:
             return OpenAIService(apiKey: apiKey)
         case .anthropic:
-            throw LLMFactoryError.serviceNotImplemented("Anthropic")
+            return AnthropicService(apiKey: apiKey)
         }
     }
 }
