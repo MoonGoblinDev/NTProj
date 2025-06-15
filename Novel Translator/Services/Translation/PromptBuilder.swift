@@ -8,65 +8,140 @@
 import Foundation
 
 class PromptBuilder {
+    
+    // MARK: - Public Methods
+    
     func buildTranslationPrompt(
         text: String,
         glossaryMatches: [GlossaryMatch],
         sourceLanguage: String,
         targetLanguage: String,
-        preset: PromptPreset?
+        preset: PromptPreset?,
+        config: TranslationProject.TranslationConfig
     ) -> String {
-        let template = (preset?.prompt.isEmpty == false) ? preset!.prompt : PromptPreset.defaultPrompt
-
-        var glossaryBlock = ""
-        if !glossaryMatches.isEmpty {
-            // Step 1: Get unique entries from all matches to avoid duplicates.
-            let uniqueEntries = Set(glossaryMatches.map { $0.entry })
-
-            // Step 2: Group the unique entries by their category.
-            let groupedEntries = Dictionary(grouping: uniqueEntries, by: { $0.category })
-
-            // Step 3: Build the formatted string from the grouped dictionary.
-            glossaryBlock += "CRITICAL: You MUST use the following translations for specific terms. Do not deviate from them.\n"
-            glossaryBlock += "--- GLOSSARY START ---\n"
-
-            // Sort categories by their display name for consistent, alphabetical order.
-            for category in groupedEntries.keys.sorted(by: { $0.displayName < $1.displayName }) {
-                guard let entries = groupedEntries[category], !entries.isEmpty else { continue }
-                
-                // Add the category header.
-                glossaryBlock += "[\(category.displayName)]\n"
-                
-                // Sort entries within the category alphabetically by the original term.
-                for entry in entries.sorted(by: { $0.originalTerm < $1.originalTerm }) {
-                    var line = "\(entry.originalTerm) -> \(entry.translation)"
-                    // Append context description if it exists and is not empty.
-                    if entry.contextDescription != "" {
-                        line += " | Context: \(entry.contextDescription)"
-                    }
-                    glossaryBlock += "\(line)\n"
-                }
-                // Add a blank line after each category for readability.
-                glossaryBlock += "\n"
-            }
-            
-            // Remove the final blank line and add the end marker.
-            glossaryBlock = glossaryBlock.trimmingCharacters(in: .whitespacesAndNewlines)
-            glossaryBlock += "\n--- GLOSSARY END ---\n\n"
+        var promptComponents: [String] = []
+        
+        // 1. Build the one-shot example block if provided
+        if let exampleBlock = buildExampleBlock(from: preset, config: config) {
+            promptComponents.append(exampleBlock)
         }
-
-        var prompt = template
+        
+        // 2. Build the main prompt body from the template
+        let template = (preset?.prompt.isEmpty == false) ? preset!.prompt : PromptPreset.defaultPrompt
+        let glossaryBlock = buildGlossaryBlock(from: glossaryMatches)
+        
+        // 3. Handle line-sync pre-processing if enabled
+        let textToTranslate: String
+        if config.forceLineCountSync {
+            promptComponents.append(getLineSyncInstruction())
+            textToTranslate = preprocessTextForLineSync(text: text)
+        } else {
+            textToTranslate = text
+        }
+        
+        var mainPrompt = template
             .replacingOccurrences(of: "{{SOURCE_LANGUAGE}}", with: sourceLanguage)
             .replacingOccurrences(of: "{{TARGET_LANGUAGE}}", with: targetLanguage)
-            .replacingOccurrences(of: "{{TEXT}}", with: text)
+            .replacingOccurrences(of: "{{TEXT}}", with: textToTranslate)
 
         // Handle optional glossary placeholder
         if template.contains("{{GLOSSARY}}") {
-            prompt = prompt.replacingOccurrences(of: "{{GLOSSARY}}", with: glossaryBlock)
+            mainPrompt = mainPrompt.replacingOccurrences(of: "{{GLOSSARY}}", with: glossaryBlock)
         } else if !glossaryBlock.isEmpty {
-            // If the user's template doesn't include the placeholder, prepend the glossary.
-            prompt = glossaryBlock + prompt
+            mainPrompt = glossaryBlock + mainPrompt
         }
+        
+        promptComponents.append(mainPrompt)
+        
+        return promptComponents.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
-        return prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Public method to clean the LLM's output if line-syncing was used.
+    public func postprocessLineSync(text: String) -> String {
+        return postprocessTextForLineSync(text: text)
+    }
+
+    // MARK: - Private Helpers
+    
+    private func getLineSyncInstruction() -> String {
+        return """
+        CRITICAL INSTRUCTION: The following text has been formatted with line markers (e.g., [L1], [L2]). You MUST translate the text for each line and reproduce the exact same line markers in your output. Empty lines must be preserved. The number of lines in your translation must exactly match the number of lines in the source.
+        
+        Example:
+        [L1] source text -> [L1] translation text
+        [L2] -> [L2]
+        [L3] source text -> [L3] translation text
+        
+        """
+    }
+
+    private func preprocessTextForLineSync(text: String) -> String {
+        let lines = text.components(separatedBy: .newlines)
+        return lines.enumerated().map { "[L\($0.offset + 1)] \($0.element)" }.joined(separator: "\n")
+    }
+    
+    private func postprocessTextForLineSync(text: String) -> String {
+        let lines = text.components(separatedBy: .newlines)
+        let pattern = #"^\[L\d+\] ?"# // Regex to find "[L...]" at the start of a line, with an optional space.
+
+        return lines.map { line in
+            line.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+        }.joined(separator: "\n")
+    }
+    
+    private func buildExampleBlock(from preset: PromptPreset?, config: TranslationProject.TranslationConfig) -> String? {
+        guard let preset = preset, preset.provideExample, !preset.exampleRawText.isEmpty else { return nil }
+        
+        let rawExample = config.forceLineCountSync ? preprocessTextForLineSync(text: preset.exampleRawText) : preset.exampleRawText
+        let translatedExample = config.forceLineCountSync ? preprocessTextForLineSync(text: preset.exampleTranslatedText) : preset.exampleTranslatedText
+        
+        return """
+        Here is an example of the desired translation style and format. Follow it carefully.
+        --- EXAMPLE START ---
+        [Source]:
+        \(rawExample)
+        
+        [Translation]:
+        \(translatedExample)
+        --- EXAMPLE END ---
+        """
+    }
+
+    private func buildGlossaryBlock(from glossaryMatches: [GlossaryMatch]) -> String {
+        guard !glossaryMatches.isEmpty else { return "" }
+        
+        var glossaryBlock = ""
+        // Step 1: Get unique entries from all matches to avoid duplicates.
+        let uniqueEntries = Set(glossaryMatches.map { $0.entry })
+
+        // Step 2: Group the unique entries by their category.
+        let groupedEntries = Dictionary(grouping: uniqueEntries, by: { $0.category })
+
+        // Step 3: Build the formatted string from the grouped dictionary.
+        glossaryBlock += "CRITICAL: You MUST use the following translations for specific terms. Do not deviate from them.\n"
+        glossaryBlock += "--- GLOSSARY START ---\n"
+
+        // Sort categories by their display name for consistent, alphabetical order.
+        for category in groupedEntries.keys.sorted(by: { $0.displayName < $1.displayName }) {
+            guard let entries = groupedEntries[category], !entries.isEmpty else { continue }
+            
+            // Add the category header.
+            glossaryBlock += "[\(category.displayName)]\n"
+            
+            // Sort entries within the category alphabetically by the original term.
+            for entry in entries.sorted(by: { $0.originalTerm < $1.originalTerm }) {
+                var line = "\(entry.originalTerm) -> \(entry.translation)"
+                if !entry.contextDescription.isEmpty {
+                    line += " | Context: \(entry.contextDescription)"
+                }
+                glossaryBlock += "\(line)\n"
+            }
+            glossaryBlock += "\n"
+        }
+        
+        glossaryBlock = glossaryBlock.trimmingCharacters(in: .whitespacesAndNewlines)
+        glossaryBlock += "\n--- GLOSSARY END ---\n\n"
+        
+        return glossaryBlock
     }
 }

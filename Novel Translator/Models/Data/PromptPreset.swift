@@ -6,6 +6,11 @@ struct PromptPreset: Codable, Identifiable, Hashable {
     var prompt: String
     var createdDate: Date = Date()
     var lastModifiedDate: Date = Date()
+    
+    // NEW: Properties for one-shot example
+    var provideExample: Bool = false
+    var exampleRawText: String = ""
+    var exampleTranslatedText: String = ""
 
     init(name: String, prompt: String) {
         self.name = name

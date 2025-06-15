@@ -52,7 +52,7 @@ fileprivate struct ChapterTabItem: View {
             Text("􁜿")
                 .font(.system(size: 13))
                 .lineLimit(1)
-                .foregroundColor(hasUnsavedChanges ? Color.accentColor : .primary)
+                .foregroundColor(hasUnsavedChanges ? Color.unsaved : .primary)
                 .padding(.leading, 15)
             
             Text(chapter.title)

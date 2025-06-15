@@ -49,12 +49,14 @@ class TranslationViewModel {
         let selectedPreset = settings.promptPresets.first { $0.id == settings.selectedPromptPresetID }
         
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
+        // UPDATED: Pass the project's translationConfig to the builder
         let prompt = promptBuilder.buildTranslationPrompt(
             text: chapter.rawContent,
             glossaryMatches: matches,
             sourceLanguage: project.sourceLanguage,
             targetLanguage: project.targetLanguage,
-            preset: selectedPreset
+            preset: selectedPreset,
+            config: project.translationConfig // Pass the new config
         )
         
         do {
@@ -71,12 +73,20 @@ class TranslationViewModel {
                 }
             }
             
+            // --- NEW: Post-processing step ---
+            var finalFullText = translationText
+            if project.translationConfig.forceLineCountSync {
+                finalFullText = promptBuilder.postprocessLineSync(text: finalFullText)
+                // Update the UI one last time with the cleaned text
+                translationText = finalFullText
+            }
+
             // Once the stream is finished, save the final result to the in-memory model.
             let translationTime = Date().timeIntervalSince(startTime)
             translationService.updateModelsAfterStreaming(
                 project: project,
                 chapterID: chapter.id,
-                fullText: translationText,
+                fullText: finalFullText, // Use the potentially cleaned text
                 prompt: prompt,
                 modelUsed: settings.selectedModel,
                 inputTokens: finalInputTokens,

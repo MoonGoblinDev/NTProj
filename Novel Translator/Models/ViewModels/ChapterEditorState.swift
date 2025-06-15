@@ -39,5 +39,17 @@ class ChapterEditorState {
         container.font = NSFont.systemFont(ofSize: 14)
         container.foregroundColor = NSColor.textColor
         self.translatedAttributedText = AttributedString(newText, attributes: container)
+        
+        // --- FIX: Sanitize the selection to prevent crashes ---
+        // After updating the text, the old selection might be out of bounds.
+        // We check if it's still valid, and if not, we reset it to a safe
+        // location (the end of the new text). This is the most intuitive
+        // place for the cursor to be after a stream.
+        if let currentSelection = self.translatedSelection {
+            let newLength = newText.utf16.count // Use utf16.count for NSRange compatibility
+            if (currentSelection.location + currentSelection.length) > newLength {
+                self.translatedSelection = NSRange(location: newLength, length: 0)
+            }
+        }
     }
 }

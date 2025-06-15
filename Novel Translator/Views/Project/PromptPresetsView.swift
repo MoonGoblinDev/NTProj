@@ -110,6 +110,30 @@ fileprivate struct PromptPresetDetailView: View {
                 }
             }
             
+            // --- NEW SECTION for One-Shot Example ---
+            Section("One-Shot Example (Optional)") {
+                Toggle("Provide example translation", isOn: $preset.provideExample)
+                
+                if preset.provideExample {
+                    HSplitView {
+                        VStack(alignment: .leading) {
+                            Text("Example Raw Text").font(.headline)
+                            TextEditor(text: $preset.exampleRawText)
+                                .frame(minHeight: 100, maxHeight: .infinity)
+                                .cornerRadius(8)
+                        }
+                        
+                        VStack(alignment: .leading) {
+                            Text("Example Translated Text").font(.headline)
+                            TextEditor(text: $preset.exampleTranslatedText)
+                                .frame(minHeight: 100, maxHeight: .infinity)
+                                .cornerRadius(8)
+                        }
+                    }
+                    .frame(height: 200)
+                }
+            }
+
             Section("Available Placeholders") {
                 Text("Use these placeholders in your prompt above:")
                     .foregroundStyle(.secondary)
@@ -126,5 +150,9 @@ fileprivate struct PromptPresetDetailView: View {
         .padding()
         .onChange(of: preset.name) { _, _ in preset.lastModifiedDate = Date() }
         .onChange(of: preset.prompt) { _, _ in preset.lastModifiedDate = Date() }
+        // NEW: Also track changes on the new fields
+        .onChange(of: preset.provideExample) { _, _ in preset.lastModifiedDate = Date() }
+        .onChange(of: preset.exampleRawText) { _, _ in preset.lastModifiedDate = Date() }
+        .onChange(of: preset.exampleTranslatedText) { _, _ in preset.lastModifiedDate = Date() }
     }
 }

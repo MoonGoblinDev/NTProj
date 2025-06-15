@@ -32,7 +32,7 @@ struct ChapterListView: View {
                                         .foregroundStyle(.secondary)
                                     Text("􁜿 ")
                                         .lineLimit(1)
-                                        .foregroundColor(workspaceViewModel.editorStates[chapter.id]?.hasUnsavedChanges ?? false ? Color.accentColor : .primary)
+                                        .foregroundColor(workspaceViewModel.editorStates[chapter.id]?.hasUnsavedChanges ?? false ? Color.unsaved : .primary)
                                     Text(chapter.title)
                                         .lineLimit(1)
                                         .foregroundStyle(.primary)

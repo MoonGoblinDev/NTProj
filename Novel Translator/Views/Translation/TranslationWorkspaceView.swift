@@ -16,6 +16,8 @@ struct TranslationWorkspaceView: View {
     @State private var entryToDisplay: GlossaryEntry?
     @State private var glossaryMatches: [GlossaryMatch] = []
     
+    @State private var isConfigPopoverShown = false
+    
     private let glossaryMatcher = GlossaryMatcher()
     
     private var activeChapter: Chapter? {
@@ -233,11 +235,48 @@ struct TranslationWorkspaceView: View {
                     Spacer()
                     HStack {
                         Spacer()
+                    
+                        Button {
+                            // Toggle the popover state
+                            isConfigPopoverShown.toggle()
+                        } label: {
+                            Label("Config", systemImage: "gearshape")
+                        }
+                        .tint(.gray)
+                        .buttonStyle(.borderedProminent)
+                        .popover(isPresented: $isConfigPopoverShown) {
+                            VStack {
+                                Toggle("Force Line Count Sync", isOn: $project.translationConfig.forceLineCountSync)
+                                    .onChange(of: project.translationConfig.forceLineCountSync) { _, _ in
+                                        project.lastModifiedDate = Date()
+                                        projectManager.isProjectDirty = true
+                                    }
+                            }
+                            .padding()
+                        }
+                        .help("Advanced translation settings")
+                        .onHover { isHovering in
+                            if isHovering {
+                                NSCursor.pointingHand.set()
+                            } else {
+                                NSCursor.arrow.set()
+                            }
+                        }
+                        
                         Button("Prompt Preview", systemImage: "sparkles.square.filled.on.square") {
                             generatePromptPreview()
                         }
+                        .tint(.gray)
+                        .buttonStyle(.borderedProminent)
                         .help("Show the final prompt that will be sent to the AI")
                         .disabled(chapter.rawContent.isEmpty)
+                        .onHover { isHovering in
+                            if isHovering {
+                                NSCursor.pointingHand.set()
+                            } else {
+                                NSCursor.arrow.set()
+                            }
+                        }
                         
                         Button("Translate", systemImage: "sparkles") {
                             Task {
@@ -246,6 +285,13 @@ struct TranslationWorkspaceView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(activeChapter == nil || chapter.rawContent.isEmpty == true || viewModel?.isTranslating == true)
+                        .onHover { isHovering in
+                            if isHovering {
+                                NSCursor.pointingHand.set()
+                            } else {
+                                NSCursor.arrow.set()
+                            }
+                        }
                     }
                     .padding()
                 }
@@ -291,11 +337,12 @@ struct TranslationWorkspaceView: View {
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
 
         self.promptPreviewText = promptBuilder.buildTranslationPrompt(
-            text: chapter.rawContent,
-            glossaryMatches: matches,
-            sourceLanguage: project.sourceLanguage,
-            targetLanguage: project.targetLanguage,
-            preset: selectedPreset
+                    text: chapter.rawContent,
+                    glossaryMatches: matches,
+                    sourceLanguage: project.sourceLanguage,
+                    targetLanguage: project.targetLanguage,
+                    preset: selectedPreset,
+                    config: project.translationConfig
         )
 
         self.isPromptPreviewPresented = true
