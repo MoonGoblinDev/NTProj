@@ -11,7 +11,7 @@ import Foundation
 struct ProjectMetadata: Codable, Identifiable, Hashable {
     var id: UUID
     var name: String
-    var path: String // file path as a string for Codable
+    var bookmarkData: Data // FIX: Store security-scoped bookmark data instead of a raw path.
     var lastOpened: Date
 }
 

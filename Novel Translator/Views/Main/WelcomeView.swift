@@ -39,7 +39,8 @@ struct WelcomeView: View {
                     } label: {
                         VStack(alignment: .leading) {
                             Text(projectMeta.name).fontWeight(.bold)
-                            Text(projectMeta.path).font(.caption).foregroundStyle(.secondary)
+                            // FIX: Removed the file path display as it's no longer directly available
+                            // and requires resolving the bookmark, which is best avoided in the view.
                         }
                     }
                     .buttonStyle(.plain)

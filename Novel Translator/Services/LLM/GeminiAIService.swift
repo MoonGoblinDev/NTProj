@@ -58,7 +58,6 @@ struct ModelInfo: Codable, Identifiable {
 // MARK: - Codable Structs for Token Counting (/countTokens)
 private struct CountTokensRequestPayload: Codable {
     let contents: [GeminiRequestPayload.Content]
-    let safetySettings: [GeminiRequestPayload.SafetySetting]
 }
 
 private struct CountTokensResponsePayload: Codable {
@@ -148,10 +147,9 @@ class GoogleService: LLMServiceProtocol {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        // The payload for counting includes safety settings
+        // The payload for counting without safety settings
         let requestPayload = CountTokensRequestPayload(
-            contents: [.init(parts: [.init(text: text)])],
-            safetySettings: safetySettings
+            contents: [.init(parts: [.init(text: text)])]
         )
         urlRequest.httpBody = try JSONEncoder().encode(requestPayload)
         

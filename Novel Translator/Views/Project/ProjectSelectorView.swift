@@ -19,8 +19,9 @@ struct ProjectSelectorView: View {
                 Divider()
             }
             
+            // FIX: Filter by project ID instead of path for correctness and simplicity.
             let otherProjects = projectManager.settings.projects.filter {
-                $0.path != projectManager.currentProjectURL?.path
+                $0.id != projectManager.currentProject?.id
             }
             
             if !otherProjects.isEmpty {

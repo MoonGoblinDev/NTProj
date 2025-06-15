@@ -11,7 +11,23 @@ import Foundation
 @MainActor
 class ProjectManager: ObservableObject {
     @Published private(set) var currentProject: TranslationProject?
-    @Published private(set) var currentProjectURL: URL?
+    
+    // FIX: Use a private, locked property to handle cleanup in the non-isolated deinit.
+    private let urlLock = NSLock()
+    private var _urlToStopAccessing: URL?
+    
+    @Published private(set) var currentProjectURL: URL? {
+        didSet {
+            // When the project URL changes, we must stop accessing the old one to release the resource.
+            // This is triggered when a new project is loaded or the current one is closed (set to nil).
+            oldValue?.stopAccessingSecurityScopedResource()
+            
+            // Keep our private, thread-safe property in sync for deinit.
+            urlLock.lock()
+            _urlToStopAccessing = currentProjectURL
+            urlLock.unlock()
+        }
+    }
     @Published var settings: AppSettings
     
     var isProjectDirty: Bool = false
@@ -41,6 +57,14 @@ class ProjectManager: ObservableObject {
         }
         
         loadSettings()
+    }
+
+    deinit {
+        // FIX: Access the thread-safe private property from the non-isolated deinit context.
+        // This ensures the very last security-scoped resource is released when the app closes.
+        urlLock.lock()
+        _urlToStopAccessing?.stopAccessingSecurityScopedResource()
+        urlLock.unlock()
     }
     
     // MARK: - Settings Persistence
@@ -107,8 +131,32 @@ class ProjectManager: ObservableObject {
     }
     
     func switchProject(to metadata: ProjectMetadata) {
-        let url = URL(fileURLWithPath: metadata.path)
-        loadProject(from: url)
+        var isStale = false
+        do {
+            // FIX: Resolve the URL from the security-scoped bookmark data.
+            let url = try URL(resolvingBookmarkData: metadata.bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
+            
+            // FIX: Start accessing the resource. This is required to read the file.
+            guard url.startAccessingSecurityScopedResource() else {
+                print("Failed to start accessing security-scoped resource for project \(metadata.name). The user may have moved or deleted the file, or permissions have changed.")
+                // Optionally: ask user to locate file or remove from recents.
+                return
+            }
+
+            // Load the project. The `loadProject` function handles the rest.
+            // Access will be stopped by the `didSet` on `currentProjectURL` when the project is closed or another is opened.
+            loadProject(from: url)
+
+            if isStale {
+                // Because `loadProject` calls `updateProjectMetadata`, the stale bookmark
+                // will be automatically replaced with a fresh one.
+                print("Resolved and updated a stale bookmark for project: \(metadata.name)")
+            }
+            
+        } catch {
+            print("Failed to resolve bookmark for project \(metadata.name): \(error). The file may have been moved or deleted.")
+            // Optionally: ask user to locate file or remove from recents.
+        }
     }
 
     func saveProject() {
@@ -132,7 +180,7 @@ class ProjectManager: ObservableObject {
     func closeProject() {
         // TODO: Check for unsaved changes before closing
         self.currentProject = nil
-        self.currentProjectURL = nil
+        self.currentProjectURL = nil // This triggers `didSet` which calls `stopAccessingSecurityScopedResource`
         self.isProjectDirty = false
     }
     
@@ -141,23 +189,35 @@ class ProjectManager: ObservableObject {
             let data = try Data(contentsOf: url)
             let project = try jsonDecoder.decode(TranslationProject.self, from: data)
             self.currentProject = project
-            self.currentProjectURL = url
+            self.currentProjectURL = url // This sets the new URL and `didSet` releases the old one.
             self.isProjectDirty = false
             updateProjectMetadata(for: project, at: url)
         } catch {
             // TODO: Present an error alert to the user
             print("Failed to open or decode project: \(error)")
+            // If we started access from a bookmark and loading failed, we should stop it.
+            // When load fails, currentProjectURL isn't set, so the old one's access right remains.
+            // The `didSet` on `currentProjectURL` *will* be called for the old value, stopping its access.
+            // The new URL's access will be stopped when another project is loaded or on app exit.
+            url.stopAccessingSecurityScopedResource()
         }
     }
     
     private func updateProjectMetadata(for project: TranslationProject, at url: URL) {
+        // FIX: Create security-scoped bookmark data to persist file access permissions.
+        guard let bookmarkData = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) else {
+            print("Error: Could not create bookmark for URL \(url.path)")
+            return
+        }
+
         if let index = settings.projects.firstIndex(where: { $0.id == project.id }) {
             // Update existing entry
             settings.projects[index].name = project.name
             settings.projects[index].lastOpened = Date()
+            settings.projects[index].bookmarkData = bookmarkData
         } else {
             // Add new entry
-            let newMetadata = ProjectMetadata(id: project.id, name: project.name, path: url.path, lastOpened: Date())
+            let newMetadata = ProjectMetadata(id: project.id, name: project.name, bookmarkData: bookmarkData, lastOpened: Date())
             settings.projects.append(newMetadata)
         }
         
