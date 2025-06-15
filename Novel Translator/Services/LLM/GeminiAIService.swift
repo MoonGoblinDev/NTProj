@@ -3,6 +3,7 @@ import Foundation
 // MARK: - Codable Structs for Translation (/generateContent)
 private struct GeminiRequestPayload: Codable {
     let contents: [Content]
+    let safetySettings: [SafetySetting]
     
     struct Content: Codable {
         let parts: [Part]
@@ -10,6 +11,11 @@ private struct GeminiRequestPayload: Codable {
     
     struct Part: Codable {
         let text: String
+    }
+    
+    struct SafetySetting: Codable {
+        let category: String
+        let threshold: String
     }
 }
 
@@ -50,6 +56,11 @@ struct ModelInfo: Codable, Identifiable {
 }
 
 // MARK: - Codable Structs for Token Counting (/countTokens)
+private struct CountTokensRequestPayload: Codable {
+    let contents: [GeminiRequestPayload.Content]
+    let safetySettings: [GeminiRequestPayload.SafetySetting]
+}
+
 private struct CountTokensResponsePayload: Codable {
     let totalTokens: Int
 }
@@ -81,6 +92,15 @@ enum GeminiError: LocalizedError {
 // MARK: - GoogleService Implementation
 class GoogleService: LLMServiceProtocol {
     private let apiKey: String
+    
+    // Safety settings to disable all safety filters
+    private let safetySettings = [
+        GeminiRequestPayload.SafetySetting(category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE"),
+        GeminiRequestPayload.SafetySetting(category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE"),
+        GeminiRequestPayload.SafetySetting(category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE"),
+        GeminiRequestPayload.SafetySetting(category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE"),
+        GeminiRequestPayload.SafetySetting(category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE")
+    ]
     
     init(apiKey: String) {
         self.apiKey = apiKey
@@ -128,8 +148,11 @@ class GoogleService: LLMServiceProtocol {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        // The payload for counting is the same as for generation
-        let requestPayload = GeminiRequestPayload(contents: [.init(parts: [.init(text: text)])])
+        // The payload for counting includes safety settings
+        let requestPayload = CountTokensRequestPayload(
+            contents: [.init(parts: [.init(text: text)])],
+            safetySettings: safetySettings
+        )
         urlRequest.httpBody = try JSONEncoder().encode(requestPayload)
         
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
@@ -163,7 +186,8 @@ class GoogleService: LLMServiceProtocol {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let requestPayload = GeminiRequestPayload(
-            contents: [.init(parts: [.init(text: request.prompt)])]
+            contents: [.init(parts: [.init(text: request.prompt)])],
+            safetySettings: safetySettings
         )
         urlRequest.httpBody = try JSONEncoder().encode(requestPayload)
         
@@ -214,7 +238,8 @@ class GoogleService: LLMServiceProtocol {
                     urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     
                     let requestPayload = GeminiRequestPayload(
-                        contents: [.init(parts: [.init(text: request.prompt)])]
+                        contents: [.init(parts: [.init(text: request.prompt)])],
+                        safetySettings: safetySettings
                     )
                     urlRequest.httpBody = try JSONEncoder().encode(requestPayload)
                     
