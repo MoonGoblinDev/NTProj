@@ -109,7 +109,7 @@ private struct AnthropicTokenCountRequest: Codable {
 }
 
 private struct AnthropicTokenCountResponse: Codable {
-    let token_count: Int
+    let input_tokens: Int
 }
 
 // For Model Listing
@@ -297,7 +297,7 @@ class AnthropicService: LLMServiceProtocol {
 
     // MARK: - Token Counting
     func countTokens(text: String, model: String) async throws -> Int {
-        guard let url = URL(string: "\(baseURL)/token_count") else {
+        guard let url = URL(string: "\(baseURL)/messages/count_tokens") else {
             throw AnthropicError.invalidURL
         }
 
@@ -313,7 +313,7 @@ class AnthropicService: LLMServiceProtocol {
 
         do {
             let decodedResponse = try JSONDecoder().decode(AnthropicTokenCountResponse.self, from: data)
-            return decodedResponse.token_count
+            return decodedResponse.input_tokens
         } catch {
             throw AnthropicError.responseDecodingFailed(error)
         }

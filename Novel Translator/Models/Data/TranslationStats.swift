@@ -10,6 +10,4 @@ struct TranslationStats: Codable, Identifiable {
     var estimatedCost: Double = 0.0
     var averageTranslationTime: TimeInterval = 0
     var lastUpdated: Date = Date()
-    
-    // Note: projectId removed as this struct is now nested within the project file.
 }

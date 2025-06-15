@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		9063AAF12DFD05C000235B60 /* STTextView in Frameworks */ = {isa = PBXBuildFile; productRef = 9063AAF02DFD05C000235B60 /* STTextView */; };
+		90F72D222DFF14300001F4D5 /* Tiktoken in Frameworks */ = {isa = PBXBuildFile; productRef = 90F72D212DFF14300001F4D5 /* Tiktoken */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9063AAF12DFD05C000235B60 /* STTextView in Frameworks */,
+				90F72D222DFF14300001F4D5 /* Tiktoken in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,6 +73,7 @@
 			name = "Novel Translator";
 			packageProductDependencies = (
 				9063AAF02DFD05C000235B60 /* STTextView */,
+				90F72D212DFF14300001F4D5 /* Tiktoken */,
 			);
 			productName = "Novel Translator";
 			productReference = 908891592DF842CE000B99B4 /* Novel Translator.app */;
@@ -102,6 +105,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				9063AAEF2DFD05C000235B60 /* XCLocalSwiftPackageReference "../STTextView" */,
+				90F72D202DFF14300001F4D5 /* XCLocalSwiftPackageReference "../Tiktoken-Swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 9088915A2DF842CE000B99B4 /* Products */;
@@ -336,12 +340,20 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../STTextView;
 		};
+		90F72D202DFF14300001F4D5 /* XCLocalSwiftPackageReference "../Tiktoken-Swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../Tiktoken-Swift";
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		9063AAF02DFD05C000235B60 /* STTextView */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = STTextView;
+		};
+		90F72D212DFF14300001F4D5 /* Tiktoken */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Tiktoken;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
