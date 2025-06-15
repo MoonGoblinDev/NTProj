@@ -5,32 +5,49 @@ struct ProjectSelectorView: View {
     
     var body: some View {
         Menu {
-            if let project = projectManager.project {
-                // The current project is not a selectable item, just a title
+            if let project = projectManager.currentProject {
                 Section(project.name) {
-                    Button("Save Project", action: projectManager.saveProject)
-                        .disabled(!projectManager.isProjectDirty)
+                    Button("Save Project") {
+                        // This logic should be moved to the app's Command handler
+                        // to ensure it's triggered from one place.
+                        // For now, we'll call the manager directly.
+                        NotificationCenter.default.post(name: .init("saveProjectCommand"), object: nil)
+                    }
+                    .disabled(!projectManager.isProjectDirty)
                     Button("Close Project", action: projectManager.closeProject)
                 }
                 Divider()
             }
             
+            let otherProjects = projectManager.settings.projects.filter {
+                $0.path != projectManager.currentProjectURL?.path
+            }
+            
+            if !otherProjects.isEmpty {
+                Section("Switch Project") {
+                    ForEach(otherProjects) { metadata in
+                        Button(metadata.name) {
+                            projectManager.switchProject(to: metadata)
+                        }
+                    }
+                }
+                Divider()
+            }
+            
+            // Re-creating these from WelcomeView for convenience
             Button("Create New Project...", systemImage: "plus") {
-                // This would typically present the creation sheet.
-                // For simplicity, we assume another part of the UI handles this.
-                // Or we can post a notification.
-                // The WelcomeView handles this, so this button is for convenience.
+                // This is a bit of a hack. A better way would be a shared state object.
+                // For now, post a notification that WelcomeView or ContentView can catch.
+                NotificationCenter.default.post(name: .init("showCreateProjectSheet"), object: nil)
             }
             
             Button("Open Project...", systemImage: "folder") {
                 projectManager.openProject()
             }
             
-            // TODO: Add a list of recent projects from UserDefaults
-            
         } label: {
             HStack {
-                Text(projectManager.project?.name ?? "No Project Open")
+                Text(projectManager.currentProject?.name ?? "No Project Open")
                     .fontWeight(.bold)
                     .lineLimit(1)
                 Spacer()
@@ -38,6 +55,7 @@ struct ProjectSelectorView: View {
             .foregroundColor(.primary)
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
+        //.menuStyle(.borderlessButton)
+        .frame(width: 120)
     }
 }

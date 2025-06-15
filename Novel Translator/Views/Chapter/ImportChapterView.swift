@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ImportChapterView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var projectManager: ProjectManager
     
     let project: TranslationProject
     
@@ -40,9 +41,10 @@ struct ImportChapterView: View {
                     .padding(.horizontal)
                 
                 if !viewModel.importMessage.isEmpty && viewModel.importMessage != "Selecting files..." {
+                    let isError = viewModel.importMessage.contains("Error") || viewModel.importMessage.contains("No new chapters")
                     Text(viewModel.importMessage)
                         .font(.footnote)
-                        .foregroundColor(viewModel.importMessage.contains("Error") ? .red : .green)
+                        .foregroundColor(isError ? .red : .secondary)
                         .padding()
                 }
             }
@@ -59,11 +61,14 @@ struct ImportChapterView: View {
                 
                 Button("Select Files...") {
                     Task {
-                        await viewModel.startImport()
-                        if !viewModel.importMessage.contains("Error") && !viewModel.importMessage.contains("Cancelled") {
-                             try? await Task.sleep(for: .seconds(1.5))
-                             dismiss()
+                        let success = await viewModel.startImport()
+                        if success {
+                            projectManager.saveProject()
+                            // Give the user a moment to see the success message
+                            try? await Task.sleep(for: .seconds(1.5))
+                            dismiss()
                         }
+                        // On failure, the sheet remains open displaying the error message.
                     }
                 }
                 .buttonStyle(.borderedProminent)

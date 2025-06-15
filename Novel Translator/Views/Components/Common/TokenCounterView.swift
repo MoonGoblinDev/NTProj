@@ -2,18 +2,18 @@ import SwiftUI
 
 struct TokenCounterView: View {
     let text: String
-    let project: TranslationProject
+    @ObservedObject var projectManager: ProjectManager
     let autoCount: Bool
 
     @State private var viewModel: TokenCounterViewModel
-    
+
     @State private var isHovering = false
 
-    init(text: String, project: TranslationProject, autoCount: Bool) {
+    init(text: String, projectManager: ProjectManager, autoCount: Bool) {
         self.text = text
-        self.project = project
+        self.projectManager = projectManager
         self.autoCount = autoCount
-        _viewModel = State(initialValue: TokenCounterViewModel(project: project, autoCount: autoCount))
+        _viewModel = State(initialValue: TokenCounterViewModel(settings: projectManager.settings, autoCount: autoCount))
     }
 
     var body: some View {
@@ -35,16 +35,16 @@ struct TokenCounterView: View {
         .onChange(of: text) { _, newText in
             viewModel.updateText(newText)
         }
-        .onChange(of: project.selectedModel) { _, _ in
+        .onChange(of: projectManager.settings.selectedModel) {
             // Re-fetch if the model changes
-            viewModel.retry()
+            viewModel.settingsDidChange(newSettings: projectManager.settings)
         }
     }
     
     @ViewBuilder
     private var realCountView: some View {
         HStack(spacing: 4) {
-            if let provider = project.selectedProvider {
+            if let provider = projectManager.settings.selectedProvider {
                 Image(systemName: provider.logoName)
                     .foregroundColor(provider.logoColor)
             }
@@ -60,13 +60,11 @@ struct TokenCounterView: View {
                     Label("Get real token count", systemImage: "arrow.clockwise.circle")
                 }
                 .buttonStyle(.plain)
-                .help("Get real token count from \(project.selectedProvider?.displayName ?? "provider")")
+                .help("Get real token count from \(projectManager.settings.selectedProvider?.displayName ?? "provider")")
             }
             else{
                 Text("~ \(viewModel.tokenCount) tokens")
             }
-            
-            
         }
         .onHover { hovering in
             withAnimation(.easeInOut) {

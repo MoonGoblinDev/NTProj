@@ -2,20 +2,20 @@ import SwiftUI
 
 struct PromptPresetsView: View {
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var project: TranslationProject
+    @ObservedObject var projectManager: ProjectManager
 
     @State private var selectedPresetID: UUID?
 
     private var sortedPresets: [PromptPreset] {
-        project.promptPresets.sorted { $0.createdDate < $1.createdDate }
+        projectManager.settings.promptPresets.sorted { $0.createdDate < $1.createdDate }
     }
     
     private var selectedPresetBinding: Binding<PromptPreset>? {
         guard let selectedPresetID = selectedPresetID,
-              let index = project.promptPresets.firstIndex(where: { $0.id == selectedPresetID }) else {
+              let index = projectManager.settings.promptPresets.firstIndex(where: { $0.id == selectedPresetID }) else {
             return nil
         }
-        return $project.promptPresets[index]
+        return $projectManager.settings.promptPresets[index]
     }
 
     var body: some View {
@@ -47,7 +47,7 @@ struct PromptPresetsView: View {
                 .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 400)
             } detail: {
                 if let presetBinding = selectedPresetBinding {
-                    PromptPresetDetailView(preset: presetBinding, project: project)
+                    PromptPresetDetailView(preset: presetBinding, projectManager: projectManager)
                 } else {
                     ContentUnavailableView("No Preset Selected", systemImage: "wand.and.stars", description: Text("Select a preset from the list or create a new one."))
                 }
@@ -61,31 +61,34 @@ struct PromptPresetsView: View {
         }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
+                Button("Done") {
+                    projectManager.saveSettings()
+                    dismiss()
+                }
             }
         }
     }
     
     private func addPreset() {
         let newPreset = PromptPreset(name: "New Preset", prompt: PromptPreset.defaultPrompt)
-        project.promptPresets.append(newPreset)
+        projectManager.settings.promptPresets.append(newPreset)
         selectedPresetID = newPreset.id
     }
     
     private func deletePresets(at offsets: IndexSet) {
         for index in offsets {
             let presetToDelete = sortedPresets[index]
-            if project.selectedPromptPresetID == presetToDelete.id {
-                project.selectedPromptPresetID = nil
+            if projectManager.settings.selectedPromptPresetID == presetToDelete.id {
+                projectManager.settings.selectedPromptPresetID = nil
             }
-            project.promptPresets.removeAll(where: { $0.id == presetToDelete.id })
+            projectManager.settings.promptPresets.removeAll(where: { $0.id == presetToDelete.id })
         }
     }
 }
 
 fileprivate struct PromptPresetDetailView: View {
     @Binding var preset: PromptPreset
-    let project: TranslationProject
+    @ObservedObject var projectManager: ProjectManager
     
     var body: some View {
         Form {
@@ -103,7 +106,7 @@ fileprivate struct PromptPresetDetailView: View {
                 
                 HStack {
                     Spacer()
-                    TokenCounterView(text: preset.prompt, project: project, autoCount: true)
+                    TokenCounterView(text: preset.prompt, projectManager: projectManager, autoCount: true)
                 }
             }
             

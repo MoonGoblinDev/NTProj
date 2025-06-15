@@ -12,7 +12,7 @@ struct NovelTranslatorApp: App {
                 .environmentObject(appContext)
                 .environmentObject(projectManager)
                 .environmentObject(workspaceViewModel) // FIX: Use environmentObject for ObservableObject
-                .onChange(of: projectManager.project) { _, newProject in // FIX: Equatable conformance on TranslationProject handles this
+                .onChange(of: projectManager.currentProject) { _, newProject in // FIX: Equatable conformance on TranslationProject handles this
                     // When the project manager loads a new project, tell the workspace about it.
                     workspaceViewModel.setCurrentProject(newProject)
                 }
@@ -38,7 +38,7 @@ struct NovelTranslatorApp: App {
                     // TODO: Add an unsaved changes check here
                     projectManager.closeProject()
                 }
-                .disabled(projectManager.project == nil)
+                .disabled(projectManager.currentProject == nil)
             }
         }
     }

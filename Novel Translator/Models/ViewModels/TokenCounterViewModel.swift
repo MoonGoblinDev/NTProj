@@ -10,13 +10,13 @@ class TokenCounterViewModel {
     var errorMessage: String?
     
     // MARK: - Private Properties
-    private var project: TranslationProject
+    private var settings: AppSettings
     private let autoCount: Bool
     private var textToCount: String = ""
     private var debounceTask: Task<Void, Never>?
     
-    init(project: TranslationProject, autoCount: Bool) {
-        self.project = project
+    init(settings: AppSettings, autoCount: Bool) {
+        self.settings = settings
         self.autoCount = autoCount
     }
 
@@ -37,7 +37,7 @@ class TokenCounterViewModel {
         guard autoCount else { return }
         
         // Don't bother with API calls for empty text or if no API key is set for the provider
-        guard !newText.isEmpty, let config = project.apiConfigurations.first(where: { $0.provider == project.selectedProvider }),
+        guard !newText.isEmpty, let config = settings.apiConfigurations.first(where: { $0.provider == settings.selectedProvider }),
               let apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier), !apiKey.isEmpty else {
             return
         }
@@ -65,21 +65,27 @@ class TokenCounterViewModel {
             await fetchRealTokenCount()
         }
     }
+
+    /// Call this when the model or settings change
+    func settingsDidChange(newSettings: AppSettings) {
+        self.settings = newSettings
+        retry()
+    }
     
     private func fetchRealTokenCount() async {
         isLoading = true
         errorMessage = nil
 
         do {
-            guard let provider = project.selectedProvider else {
+            guard let provider = settings.selectedProvider else {
                 throw URLError(.userAuthenticationRequired) // Or a more specific error
             }
-            guard let config = project.apiConfigurations.first(where: { $0.provider == provider }) else {
+            guard let config = settings.apiConfigurations.first(where: { $0.provider == provider }) else {
                  throw URLError(.userAuthenticationRequired)
             }
             let service = try LLMServiceFactory.create(provider: provider, config: config)
             
-            let count = try await service.countTokens(text: self.textToCount, model: project.selectedModel)
+            let count = try await service.countTokens(text: self.textToCount, model: settings.selectedModel)
             
             // Update state on success
             self.tokenCount = count

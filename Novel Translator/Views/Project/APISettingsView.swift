@@ -3,7 +3,7 @@ import SwiftUI
 struct APISettingsView: View {
     @Environment(\.dismiss) private var dismiss
     
-    @ObservedObject var project: TranslationProject
+    @ObservedObject var projectManager: ProjectManager
     
     @State private var selectedProvider: APIConfiguration.APIProvider = .google
     
@@ -15,10 +15,10 @@ struct APISettingsView: View {
                 }
                 .navigationTitle("")
             } detail: {
-                if let configIndex = project.apiConfigurations.firstIndex(where: { $0.provider == selectedProvider }) {
+                if let configIndex = projectManager.settings.apiConfigurations.firstIndex(where: { $0.provider == selectedProvider }) {
                     ProviderSettingsDetailView(
-                        config: $project.apiConfigurations[configIndex],
-                        project: project
+                        config: $projectManager.settings.apiConfigurations[configIndex],
+                        projectManager: projectManager
                     )
                 } else {
                     ContentUnavailableView("Configuration Not Found", systemImage: "xmark.circle")
@@ -40,18 +40,19 @@ struct APISettingsView: View {
         }
         .frame(minWidth: 600, idealWidth: 750, minHeight: 450, idealHeight: 550)
         .onAppear {
-            selectedProvider = project.selectedProvider ?? .google
+            selectedProvider = projectManager.settings.selectedProvider ?? .google
         }
     }
     
     private func saveAndDismiss() {
         // Ensure the selected model is valid
-        if let currentConfig = project.apiConfigurations.first(where: { $0.provider == project.selectedProvider }),
-           !currentConfig.enabledModels.contains(project.selectedModel) {
+        if let currentConfig = projectManager.settings.apiConfigurations.first(where: { $0.provider == projectManager.settings.selectedProvider }),
+           !currentConfig.enabledModels.contains(projectManager.settings.selectedModel) {
             // If the currently selected model was just disabled, pick another enabled one.
-            project.selectedModel = currentConfig.enabledModels.first ?? ""
+            projectManager.settings.selectedModel = currentConfig.enabledModels.first ?? ""
         }
         
+        projectManager.saveSettings()
         dismiss()
     }
 }
@@ -59,7 +60,7 @@ struct APISettingsView: View {
 // Detail view for a single provider's settings
 fileprivate struct ProviderSettingsDetailView: View {
     @Binding var config: APIConfiguration
-    @ObservedObject var project: TranslationProject
+    @ObservedObject var projectManager: ProjectManager
     
     @State private var apiKey: String = ""
     @State private var availableModels: [String] = []
@@ -71,7 +72,6 @@ fileprivate struct ProviderSettingsDetailView: View {
             Section("API Key") {
                 SecureField("Stored in Keychain", text: $apiKey)
                     .onChange(of: apiKey) { _, newValue in
-                        // Save key immediately, but only trigger model loading after a delay
                         KeychainHelper.save(key: config.apiKeyIdentifier, stringValue: newValue)
                     }
                 
@@ -161,7 +161,7 @@ fileprivate struct ProviderSettingsDetailView: View {
                 } else {
                     config.enabledModels.removeAll { $0 == modelName }
                 }
-                project.lastModifiedDate = Date()
+                // No need to save project, just modify the binding
             }
         )
     }

@@ -11,14 +11,8 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable { /
     @Published var lastModifiedDate: Date
     @Published var projectDescription: String?
     
-    @Published var selectedProvider: APIConfiguration.APIProvider?
-    @Published var selectedModel: String
-    @Published var selectedPromptPresetID: UUID?
-    
     @Published var chapters: [Chapter]
     @Published var glossaryEntries: [GlossaryEntry]
-    @Published var apiConfigurations: [APIConfiguration]
-    @Published var promptPresets: [PromptPreset]
     
     // These are no longer direct relationships but part of the project file.
     @Published var stats: TranslationStats
@@ -33,14 +27,8 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable { /
         self.lastModifiedDate = Date()
         self.projectDescription = description
 
-        self.selectedProvider = .google
-        self.selectedModel = APIConfiguration.APIProvider.google.defaultModels.first ?? "gemini-1.5-flash-latest"
-        self.selectedPromptPresetID = nil
-        
         self.chapters = []
         self.glossaryEntries = []
-        self.apiConfigurations = []
-        self.promptPresets = []
         
         self.stats = TranslationStats()
         self.importSettings = ImportSettings()
@@ -50,8 +38,7 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable { /
     
     enum CodingKeys: String, CodingKey {
         case id, name, sourceLanguage, targetLanguage, createdDate, lastModifiedDate, projectDescription
-        case selectedProvider, selectedModel, selectedPromptPresetID
-        case chapters, glossaryEntries, apiConfigurations, promptPresets, stats, importSettings
+        case chapters, glossaryEntries, stats, importSettings
     }
     
     required init(from decoder: Decoder) throws {
@@ -63,13 +50,8 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable { /
         createdDate = try container.decode(Date.self, forKey: .createdDate)
         lastModifiedDate = try container.decode(Date.self, forKey: .lastModifiedDate)
         projectDescription = try container.decodeIfPresent(String.self, forKey: .projectDescription)
-        selectedProvider = try container.decodeIfPresent(APIConfiguration.APIProvider.self, forKey: .selectedProvider)
-        selectedModel = try container.decode(String.self, forKey: .selectedModel)
-        selectedPromptPresetID = try container.decodeIfPresent(UUID.self, forKey: .selectedPromptPresetID)
         chapters = try container.decode([Chapter].self, forKey: .chapters)
         glossaryEntries = try container.decode([GlossaryEntry].self, forKey: .glossaryEntries)
-        apiConfigurations = try container.decode([APIConfiguration].self, forKey: .apiConfigurations)
-        promptPresets = try container.decode([PromptPreset].self, forKey: .promptPresets)
         stats = try container.decode(TranslationStats.self, forKey: .stats)
         importSettings = try container.decode(ImportSettings.self, forKey: .importSettings)
     }
@@ -83,13 +65,8 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable { /
         try container.encode(createdDate, forKey: .createdDate)
         try container.encode(lastModifiedDate, forKey: .lastModifiedDate)
         try container.encode(projectDescription, forKey: .projectDescription)
-        try container.encode(selectedProvider, forKey: .selectedProvider)
-        try container.encode(selectedModel, forKey: .selectedModel)
-        try container.encode(selectedPromptPresetID, forKey: .selectedPromptPresetID)
         try container.encode(chapters, forKey: .chapters)
         try container.encode(glossaryEntries, forKey: .glossaryEntries)
-        try container.encode(apiConfigurations, forKey: .apiConfigurations)
-        try container.encode(promptPresets, forKey: .promptPresets)
         try container.encode(stats, forKey: .stats)
         try container.encode(importSettings, forKey: .importSettings)
     }

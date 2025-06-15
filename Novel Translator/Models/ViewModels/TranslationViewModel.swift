@@ -22,16 +22,15 @@ class TranslationViewModel {
         self.translationText = chapter?.translatedContent ?? ""
     }
     
-    func streamTranslateChapter(project: TranslationProject, chapter: Chapter) async {
-        // FIX: Safely unwrap the optional provider, defaulting to .google if it's nil.
-        let activeProvider = project.selectedProvider ?? .google
+    func streamTranslateChapter(project: TranslationProject, chapter: Chapter, settings: AppSettings) async {
+        let activeProvider = settings.selectedProvider ?? .google
         
-        guard let apiConfig = project.apiConfigurations.first(where: { $0.provider == activeProvider }) else {
+        guard let apiConfig = settings.apiConfigurations.first(where: { $0.provider == activeProvider }) else {
             errorMessage = "API configuration for \(activeProvider.displayName) not found."
             return
         }
 
-        guard !project.selectedModel.isEmpty else {
+        guard !settings.selectedModel.isEmpty else {
             errorMessage = "No translation model selected. Please choose one from the toolbar."
             return
         }
@@ -47,8 +46,7 @@ class TranslationViewModel {
         let promptBuilder = PromptBuilder()
         let glossaryMatcher = GlossaryMatcher()
         
-        // NEW: Fetch the selected preset
-        let selectedPreset = project.promptPresets.first { $0.id == project.selectedPromptPresetID }
+        let selectedPreset = settings.promptPresets.first { $0.id == settings.selectedPromptPresetID }
         
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
         let prompt = promptBuilder.buildTranslationPrompt(
@@ -56,12 +54,12 @@ class TranslationViewModel {
             glossaryMatches: matches,
             sourceLanguage: project.sourceLanguage,
             targetLanguage: project.targetLanguage,
-            preset: selectedPreset // Pass the preset to the builder
+            preset: selectedPreset
         )
         
         do {
             let llmService = try LLMServiceFactory.create(provider: apiConfig.provider, config: apiConfig)
-            let request = TranslationRequest(prompt: prompt, configuration: apiConfig, model: project.selectedModel)
+            let request = TranslationRequest(prompt: prompt, configuration: apiConfig, model: settings.selectedModel)
             
             let stream = llmService.streamTranslate(request: request)
             
@@ -80,7 +78,7 @@ class TranslationViewModel {
                 chapterID: chapter.id,
                 fullText: translationText,
                 prompt: prompt,
-                modelUsed: project.selectedModel,
+                modelUsed: settings.selectedModel,
                 inputTokens: finalInputTokens,
                 outputTokens: finalOutputTokens,
                 translationTime: translationTime

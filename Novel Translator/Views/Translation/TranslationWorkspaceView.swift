@@ -29,8 +29,8 @@ struct TranslationWorkspaceView: View {
     }
     
     private var selectedPresetName: String {
-        if let presetID = project.selectedPromptPresetID,
-           let preset = project.promptPresets.first(where: { $0.id == presetID }) {
+        if let presetID = projectManager.settings.selectedPromptPresetID,
+           let preset = projectManager.settings.promptPresets.first(where: { $0.id == presetID }) {
             return preset.name
         }
         return "Default Prompt"
@@ -50,7 +50,6 @@ struct TranslationWorkspaceView: View {
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 ProjectSelectorView()
-                    .frame(minWidth: 200, idealWidth: 250)
             }
             
             ToolbarItemGroup(placement: .primaryAction) {
@@ -61,14 +60,15 @@ struct TranslationWorkspaceView: View {
                 }
                 
                 Menu {
-                    Picker("Prompt Preset", selection: $project.selectedPromptPresetID) {
+                    Picker("Prompt Preset", selection: $projectManager.settings.selectedPromptPresetID) {
                         Text("Default Prompt").tag(nil as UUID?)
                         Divider()
-                        ForEach(project.promptPresets.sorted(by: { $0.createdDate < $1.createdDate })) { preset in
+                        ForEach(projectManager.settings.promptPresets.sorted(by: { $0.createdDate < $1.createdDate })) { preset in
                             Text(preset.name).tag(preset.id as UUID?)
                         }
                     }
                     .pickerStyle(.inline)
+                    .onChange(of: projectManager.settings.selectedPromptPresetID) { _, _ in projectManager.saveSettings() }
                 } label: {
                     HStack(spacing: 4) {
                         Text(selectedPresetName)
@@ -81,16 +81,17 @@ struct TranslationWorkspaceView: View {
                 Divider()
                 
                 Menu {
-                    ForEach(project.apiConfigurations.filter { !$0.enabledModels.isEmpty }) { config in
+                    ForEach(projectManager.settings.apiConfigurations.filter { !$0.enabledModels.isEmpty }) { config in
                         Section(config.provider.displayName) {
                             ForEach(config.enabledModels, id: \.self) { modelName in
                                 Button {
-                                    project.selectedProvider = config.provider
-                                    project.selectedModel = modelName
+                                    projectManager.settings.selectedProvider = config.provider
+                                    projectManager.settings.selectedModel = modelName
+                                    projectManager.saveSettings()
                                 } label: {
                                     HStack {
                                         Text(modelName)
-                                        if project.selectedProvider == config.provider && project.selectedModel == modelName {
+                                        if projectManager.settings.selectedProvider == config.provider && projectManager.settings.selectedModel == modelName {
                                             Spacer()
                                             Image(systemName: "checkmark")
                                         }
@@ -102,13 +103,13 @@ struct TranslationWorkspaceView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "cpu")
-                        Text(project.selectedModel.isEmpty ? "Select Model" : project.selectedModel)
+                        Text(projectManager.settings.selectedModel.isEmpty ? "Select Model" : projectManager.settings.selectedModel)
                             .lineLimit(1)
                     }
                 }
                 .menuIndicator(.visible)
                 .fixedSize()
-                .disabled(project.apiConfigurations.allSatisfy { $0.enabledModels.isEmpty })
+                .disabled(projectManager.settings.apiConfigurations.allSatisfy { $0.enabledModels.isEmpty })
             }
         }
         .onAppear {
@@ -146,7 +147,7 @@ struct TranslationWorkspaceView: View {
         
         return mainContent
             .sheet(isPresented: $isPresetsViewPresented) {
-                PromptPresetsView(project: project)
+                PromptPresetsView(projectManager: projectManager)
             }
             .sheet(isPresented: $isPromptPreviewPresented) {
                 VStack(spacing: 0) {
@@ -154,7 +155,7 @@ struct TranslationWorkspaceView: View {
                         Text("Generated Prompt Preview")
                             .font(.title2)
                         Spacer()
-                        TokenCounterView(text: promptPreviewText, project: project, autoCount: true)
+                        TokenCounterView(text: promptPreviewText, projectManager: projectManager, autoCount: true)
                     }
                     .padding()
                     
@@ -224,8 +225,8 @@ struct TranslationWorkspaceView: View {
                     translatedText: .init(get: { editorState.translatedAttributedText }, set: { editorState.translatedAttributedText = $0 }),
                     sourceSelection: .init(get: { editorState.sourceSelection }, set: { editorState.sourceSelection = $0 }),
                     translatedSelection: .init(get: { editorState.translatedSelection }, set: { editorState.translatedSelection = $0 }),
+                    projectManager: projectManager,
                     chapter: chapter,
-                    project: project, // FIX: Pass the project down
                     isDisabled: viewModel.isTranslating
                 )
                 VStack{
@@ -240,7 +241,7 @@ struct TranslationWorkspaceView: View {
                         
                         Button("Translate", systemImage: "sparkles") {
                             Task {
-                                await viewModel.streamTranslateChapter(project: project, chapter: chapter)
+                                await viewModel.streamTranslateChapter(project: project, chapter: chapter, settings: projectManager.settings)
                             }
                         }
                         .buttonStyle(.borderedProminent)
@@ -286,7 +287,7 @@ struct TranslationWorkspaceView: View {
         let promptBuilder = PromptBuilder()
         let glossaryMatcher = GlossaryMatcher()
 
-        let selectedPreset = project.promptPresets.first { $0.id == project.selectedPromptPresetID }
+        let selectedPreset = projectManager.settings.promptPresets.first { $0.id == projectManager.settings.selectedPromptPresetID }
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
 
         self.promptPreviewText = promptBuilder.buildTranslationPrompt(

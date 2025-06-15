@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ProjectSettingsView: View {
+    @EnvironmentObject private var projectManager: ProjectManager
     @ObservedObject var project: TranslationProject
     @State private var isAPISettingsPresented = false
 
@@ -22,7 +23,7 @@ struct ProjectSettingsView: View {
                 }
             }
             
-            Section("API Configuration") {
+            Section("API Configuration (Global)") {
                 Button("Manage API Keys & Models") {
                     isAPISettingsPresented = true
                 }
@@ -43,7 +44,7 @@ struct ProjectSettingsView: View {
         .padding()
         .navigationTitle("")
         .sheet(isPresented: $isAPISettingsPresented) {
-            APISettingsView(project: project)
+            APISettingsView(projectManager: projectManager)
         }
     }
 }

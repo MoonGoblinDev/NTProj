@@ -8,7 +8,7 @@ struct ContentView: View {
     
     var body: some View {
         Group {
-            if let project = projectManager.project {
+            if let project = projectManager.currentProject {
                 NavigationSplitView {
                     // FIX: Pass the single active project to the SidebarView.
                     SidebarView(project: project)
