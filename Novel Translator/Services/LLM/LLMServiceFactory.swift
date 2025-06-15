@@ -32,7 +32,7 @@ class LLMServiceFactory {
         case .google:
             return GoogleService(apiKey: apiKey)
         case .openai:
-            throw LLMFactoryError.serviceNotImplemented("OpenAI")
+            return OpenAIService(apiKey: apiKey)
         case .anthropic:
             throw LLMFactoryError.serviceNotImplemented("Anthropic")
         }

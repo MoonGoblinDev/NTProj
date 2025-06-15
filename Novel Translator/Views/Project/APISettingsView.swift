@@ -1,5 +1,6 @@
 import SwiftUI
 
+// MARK: - Main APISettingsView (Sheet Entry Point)
 struct APISettingsView: View {
     @Environment(\.dismiss) private var dismiss
     
@@ -15,14 +16,11 @@ struct APISettingsView: View {
                 }
                 .navigationTitle("")
             } detail: {
-                if let configIndex = projectManager.settings.apiConfigurations.firstIndex(where: { $0.provider == selectedProvider }) {
-                    ProviderSettingsDetailView(
-                        config: $projectManager.settings.apiConfigurations[configIndex],
-                        projectManager: projectManager
-                    )
-                } else {
-                    ContentUnavailableView("Configuration Not Found", systemImage: "xmark.circle")
-                }
+                // The router view decides which specific settings view to display.
+                ProviderSettingsRouter(
+                    provider: selectedProvider,
+                    projectManager: projectManager
+                )
             }
             .navigationTitle("")
             .navigationSplitViewStyle(.balanced)
@@ -57,16 +55,55 @@ struct APISettingsView: View {
     }
 }
 
-// Detail view for a single provider's settings
-fileprivate struct ProviderSettingsDetailView: View {
-    @Binding var config: APIConfiguration
+// MARK: - Router View
+/// This view is the key to fixing the update bug. It switches between the specific
+/// provider setting views, forcing SwiftUI to create a new view instance on selection change.
+fileprivate struct ProviderSettingsRouter: View {
+    let provider: APIConfiguration.APIProvider
     @ObservedObject var projectManager: ProjectManager
+
+    var body: some View {
+        if let configIndex = projectManager.settings.apiConfigurations.firstIndex(where: { $0.provider == provider }) {
+            let configBinding = $projectManager.settings.apiConfigurations[configIndex]
+            
+            switch provider {
+            case .google:
+                GeminiSettingsView(config: configBinding)
+            case .openai:
+                OpenAISettingsView(config: configBinding)
+            case .anthropic:
+                AnthropicSettingsView(config: configBinding)
+            }
+        } else {
+            ContentUnavailableView("Configuration Not Found", systemImage: "xmark.circle")
+        }
+    }
+}
+
+
+// MARK: - Base View for Shared Logic
+/// A base view that contains the common UI and logic for fetching and displaying models.
+/// This avoids code duplication in the specific provider views.
+fileprivate struct ProviderSettingsBaseView<Content: View>: View {
+    let title: String
+    @Binding var config: APIConfiguration
+    let fetcher: (_ apiKey: String) async throws -> [String]
     
     @State private var apiKey: String = ""
     @State private var availableModels: [String] = []
     @State private var isLoadingModels = false
     @State private var modelLoadingError: String?
     
+    // Optional additional content for provider-specific settings
+    @ViewBuilder let additionalContent: Content
+
+    init(title: String, config: Binding<APIConfiguration>, fetcher: @escaping (_ apiKey: String) async throws -> [String], @ViewBuilder additionalContent: () -> Content = { EmptyView() }) {
+        self.title = title
+        self._config = config
+        self.fetcher = fetcher
+        self.additionalContent = additionalContent()
+    }
+
     var body: some View {
         Form {
             Section("API Key") {
@@ -81,18 +118,16 @@ fileprivate struct ProviderSettingsDetailView: View {
                 .disabled(apiKey.isEmpty)
             }
             
+            // Allow for provider-specific form sections
+            additionalContent
+            
             Section("Enabled Models for Translation") {
                 if isLoadingModels {
-                    HStack {
-                        ProgressView()
-                        Text("Loading models...")
-                    }
+                    HStack { ProgressView(); Text("Loading models...") }
                 } else if let error = modelLoadingError {
-                    Text(error)
-                        .foregroundColor(.red)
+                    Text(error).foregroundColor(.red)
                 } else if availableModels.isEmpty {
-                    Text("No models available. Fetch them using your API key.")
-                        .foregroundStyle(.secondary)
+                    Text("No models available. Fetch them using your API key.").foregroundStyle(.secondary)
                 } else {
                     List(availableModels, id: \.self) { modelName in
                         Toggle(modelName, isOn: bindingFor(model: modelName))
@@ -101,67 +136,110 @@ fileprivate struct ProviderSettingsDetailView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("")
+        .navigationTitle(title)
         .onAppear(perform: loadInitialData)
     }
-    
+
     private func loadInitialData() {
         self.apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier) ?? ""
-        
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
-            self.availableModels = config.provider.defaultModels
-            return
-        }
-        #endif
-        
-        // Load models if key exists
-        if !apiKey.isEmpty {
-            Task { await loadModels() }
-        }
+        if !apiKey.isEmpty { Task { await loadModels() } }
     }
     
     private func loadModels() async {
         guard !apiKey.isEmpty else {
-            self.availableModels = []
-            self.modelLoadingError = "API Key is required to fetch models."
+            self.availableModels = []; self.modelLoadingError = "API Key is required."
             return
         }
-        
-        isLoadingModels = true
-        modelLoadingError = nil
-        
+        isLoadingModels = true; modelLoadingError = nil
         do {
-            switch config.provider {
-            case .google:
-                self.availableModels = try await GoogleService.fetchAvailableModels(apiKey: self.apiKey)
-            case .openai, .anthropic:
-                // For other providers, use the hardcoded default list for now
-                self.availableModels = config.provider.defaultModels
-            }
+            self.availableModels = try await fetcher(apiKey)
         } catch {
-            self.availableModels = []
-            self.modelLoadingError = error.localizedDescription
+            self.availableModels = []; self.modelLoadingError = error.localizedDescription
         }
-        
         isLoadingModels = false
     }
-    
+
     private func bindingFor(model modelName: String) -> Binding<Bool> {
         Binding<Bool>(
-            get: {
-                self.config.enabledModels.contains(modelName)
-            },
+            get: { self.config.enabledModels.contains(modelName) },
             set: { isEnabled in
                 if isEnabled {
                     if !config.enabledModels.contains(modelName) {
-                        config.enabledModels.append(modelName)
-                        config.enabledModels.sort()
+                        config.enabledModels.append(modelName); config.enabledModels.sort()
                     }
                 } else {
                     config.enabledModels.removeAll { $0 == modelName }
                 }
-                // No need to save project, just modify the binding
+            }
+        )
+    }
+}
+
+// MARK: - Provider-Specific Views
+
+fileprivate struct GeminiSettingsView: View {
+    @Binding var config: APIConfiguration
+    var body: some View {
+        ProviderSettingsBaseView(
+            title: "Google (Gemini) Settings",
+            config: $config,
+            fetcher: GoogleService.fetchAvailableModels
+        )
+    }
+}
+
+fileprivate struct OpenAISettingsView: View {
+    @Binding var config: APIConfiguration
+    var body: some View {
+        ProviderSettingsBaseView(
+            title: "OpenAI Settings",
+            config: $config,
+            fetcher: OpenAIService.fetchAvailableModels
+        )
+    }
+}
+
+fileprivate struct AnthropicSettingsView: View {
+    @Binding var config: APIConfiguration
+    @State private var apiKey: String = ""
+
+    var body: some View {
+        Form {
+            Section("API Key") {
+                SecureField("Stored in Keychain", text: $apiKey)
+                    .onChange(of: apiKey) { _, newValue in
+                        KeychainHelper.save(key: config.apiKeyIdentifier, stringValue: newValue)
+                    }
+            }
+            
+            Section("Enabled Models (Default List)") {
+                Text("Model fetching for Anthropic is not yet implemented.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                List(config.provider.defaultModels, id: \.self) { modelName in
+                    Toggle(modelName, isOn: bindingFor(model: modelName))
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Anthropic Settings")
+        .onAppear {
+            self.apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier) ?? ""
+        }
+    }
+
+    private func bindingFor(model modelName: String) -> Binding<Bool> {
+        Binding<Bool>(
+            get: { self.config.enabledModels.contains(modelName) },
+            set: { isEnabled in
+                if isEnabled {
+                    if !config.enabledModels.contains(modelName) {
+                        config.enabledModels.append(modelName); config.enabledModels.sort()
+                    }
+                } else {
+                    config.enabledModels.removeAll { $0 == modelName }
+                }
             }
         )
     }

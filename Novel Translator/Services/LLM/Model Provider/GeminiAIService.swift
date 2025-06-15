@@ -396,26 +396,21 @@ class GoogleService: LLMServiceProtocol {
         }
         
         guard let jsonText = decodedResponse.candidates.first?.content?.parts.first?.text else {
-            // If there's no text part at all, it's safer to assume no entries were found.
-            // This could happen if the model's response is blocked or empty.
             return []
         }
         
-        // FIX: If the model returns an empty string instead of an empty JSON array "[]",
-        // treat it as "no entries found" and return an empty array to prevent a crash.
         if jsonText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return []
         }
         
-        // The response text is a JSON string, so we need to decode it again.
         guard let jsonData = jsonText.data(using: .utf8) else {
             throw GeminiError.responseDecodingFailed(URLError(.cannotDecodeContentData))
         }
         
         do {
-            let jsonDecoder = JSONDecoder()
-            let extractedEntries = try jsonDecoder.decode([GlossaryEntry].self, from: jsonData)
-            return extractedEntries
+            // Use the flexible shared wrapper. This will use the robust GlossaryEntry decoder internally.
+            let wrapper = try JSONDecoder().decode(GlossaryResponseWrapper.self, from: jsonData)
+            return wrapper.entries
         } catch {
             throw GeminiError.responseDecodingFailed(error)
         }

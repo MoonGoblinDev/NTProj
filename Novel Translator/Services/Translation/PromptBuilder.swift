@@ -69,11 +69,11 @@ class PromptBuilder {
         let existingGlossaryText = existingGlossary
             .map { "- \($0.originalTerm) -> \($0.translation)" }
             .joined(separator: "\n")
+        
+        let allCategoryValues = GlossaryEntry.GlossaryCategory.allCases.map { $0.rawValue }.joined(separator: ", ")
 
         var instructions = """
         You are a linguistic expert tasked with expanding a glossary for a novel translation project. Analyze the provided source text and its professional translation. Identify new, important, or recurring terms (such as characters, places, special abilities, items, or concepts) that are NOT already in the existing glossary list.
-        
-        For each new term you identify, provide its original form from the source text, its corresponding translation from the translated text, an appropriate category, and a brief, one-sentence description of its context within the story.
         
         ---
         
@@ -81,20 +81,26 @@ class PromptBuilder {
         1.  **DO NOT** extract terms that are already present in the "Existing Glossary" list.
         2.  Focus on proper nouns, unique concepts, or recurring objects. Avoid common words.
         3.  The `contextDescription` should be concise and based *only* on the provided texts.
-        4.  You **MUST** return your findings as a JSON array of objects.
+        4.  You **MUST** return your findings as a JSON object. This object must contain a single key, "entries", which holds an array of glossary objects.
+        5.  Each object in the "entries" array **MUST** conform to this schema:
+            - `originalTerm` (string, required): The term in the source language.
+            - `translation` (string, required): The term in the target language.
+            - `category` (string, enum, required): The category of the term. Must be one of: \(allCategoryValues).
+            - `contextDescription` (string, optional): A brief explanation.
+        6.  If no new terms are found, you **MUST** return an empty array like this: `{"entries": []}`.
         """
         
         if categoriesToExtract.count < GlossaryEntry.GlossaryCategory.allCases.count {
             let categoryList = categoriesToExtract.map { $0.rawValue }.joined(separator: ", ")
-            instructions += "\n5.  Only extract terms belonging to the following categories: \(categoryList)."
+            instructions += "\n7.  Only extract terms belonging to the following categories: \(categoryList)."
         }
         
         if !fillContext {
-            instructions += "\n6.  The `contextDescription` field for all extracted items **MUST** be an empty string."
+            instructions += "\n8.  The `contextDescription` field for all extracted items **MUST** be an empty string."
         }
         
         if !additionalQuery.isEmpty {
-            instructions += "\n7.  Follow this additional instruction carefully: \(additionalQuery)"
+            instructions += "\n9.  Follow this additional instruction carefully: \(additionalQuery)"
         }
 
         let prompt = """
@@ -117,7 +123,7 @@ class PromptBuilder {
         
         ---
         
-        Now, provide the JSON array of new glossary entries.
+        Now, provide the JSON object with the "entries" key.
         """
         
         return prompt
