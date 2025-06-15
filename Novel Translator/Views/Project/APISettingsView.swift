@@ -73,6 +73,8 @@ fileprivate struct ProviderSettingsRouter: View {
                 OpenAISettingsView(config: configBinding)
             case .anthropic:
                 AnthropicSettingsView(config: configBinding)
+            case .deepseek:
+                DeepseekSettingsView(config: configBinding)
             }
         } else {
             ContentUnavailableView("Configuration Not Found", systemImage: "xmark.circle")
@@ -207,6 +209,18 @@ fileprivate struct AnthropicSettingsView: View {
             title: "Anthropic (Claude) Settings",
             config: $config,
             fetcher: AnthropicService.fetchAvailableModels
+        )
+    }
+}
+
+fileprivate struct DeepseekSettingsView: View {
+    @Binding var config: APIConfiguration
+
+    var body: some View {
+        ProviderSettingsBaseView(
+            title: "Deepseek Settings",
+            config: $config,
+            fetcher: DeepseekService.fetchAvailableModels
         )
     }
 }

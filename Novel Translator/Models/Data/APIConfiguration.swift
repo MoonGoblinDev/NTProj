@@ -16,12 +16,14 @@ struct APIConfiguration: Codable, Identifiable {
         case google = "google"
         case openai = "openai"
         case anthropic = "anthropic"
+        case deepseek = "deepseek"
         
         var displayName: String {
             switch self {
             case .openai: return "OpenAI"
             case .anthropic: return "Anthropic"
             case .google: return "Google"
+            case .deepseek: return "Deepseek"
             }
         }
         
@@ -30,6 +32,7 @@ struct APIConfiguration: Codable, Identifiable {
             case .openai: return ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
             case .anthropic: return ["claude-3-5-sonnet-20240620", "claude-3-haiku-20240307"]
             case .google: return ["gemini-1.5-flash-latest"]
+            case .deepseek: return ["deepseek-chat", "deepseek-coder"]
             }
         }
 
@@ -38,6 +41,7 @@ struct APIConfiguration: Codable, Identifiable {
             case .google: "g.circle.fill"
             case .openai: "brain.head.profile"
             case .anthropic: "a.circle.fill"
+            case .deepseek: "d.circle.fill"
             }
         }
 
@@ -46,6 +50,7 @@ struct APIConfiguration: Codable, Identifiable {
             case .google: .blue
             case .openai: .green
             case .anthropic: .orange
+            case .deepseek: .purple
             }
         }
     }

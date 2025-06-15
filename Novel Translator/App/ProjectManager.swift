@@ -66,8 +66,30 @@ class ProjectManager: ObservableObject {
         do {
             if FileManager.default.fileExists(atPath: settingsURL.path) {
                 let data = try Data(contentsOf: settingsURL)
-                self.settings = try jsonDecoder.decode(AppSettings.self, from: data)
+                var loadedSettings = try jsonDecoder.decode(AppSettings.self, from: data)
                 print("App settings loaded from \(settingsURL.path)")
+
+                // Ensure configurations exist for all providers after loading.
+                // This handles cases where a new provider is added in a future app update.
+                var settingsModified = false
+                let existingProviders = Set(loadedSettings.apiConfigurations.map { $0.provider })
+
+                for provider in APIConfiguration.APIProvider.allCases {
+                    if !existingProviders.contains(provider) {
+                        var newApiConfig = APIConfiguration(provider: provider)
+                        newApiConfig.apiKeyIdentifier = "com.noveltranslator.apikey.\(provider.rawValue)"
+                        loadedSettings.apiConfigurations.append(newApiConfig)
+                        print("Migrating settings: Added missing configuration for \(provider.displayName)")
+                        settingsModified = true
+                    }
+                }
+                
+                self.settings = loadedSettings
+                
+                // If we modified the settings, save them back to disk.
+                if settingsModified {
+                    saveSettings()
+                }
             } else {
                 // First launch, create default settings and save them.
                 print("No settings file found. Creating default settings.")
@@ -77,6 +99,7 @@ class ProjectManager: ObservableObject {
         } catch {
             print("Failed to load or decode settings, using defaults. Error: \(error)")
             self.settings = AppSettings()
+            saveSettings() // Save the fresh defaults to avoid repeated errors
         }
     }
     

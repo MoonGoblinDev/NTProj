@@ -35,6 +35,8 @@ class LLMServiceFactory {
             return OpenAIService(apiKey: apiKey)
         case .anthropic:
             return AnthropicService(apiKey: apiKey)
+        case .deepseek:
+            return DeepseekService(apiKey: apiKey)
         }
     }
 }

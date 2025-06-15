@@ -21,6 +21,8 @@ struct PromptPreset: Codable, Identifiable, Hashable {
         You are an expert novel translator. Your task is to translate the following text from {{SOURCE_LANGUAGE}} to {{TARGET_LANGUAGE}}.
         Preserve the original tone, style, and formatting, including line breaks.
         
+        Do not add any markers such as "Translation:" or any kind of prelude text at the beginning of the translation, just present the translated content directly.
+        
         {{GLOSSARY}}
         Now, translate the following text:
         --- TEXT TO TRANSLATE START ---
