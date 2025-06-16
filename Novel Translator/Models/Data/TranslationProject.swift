@@ -20,6 +20,24 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable {
 
     struct TranslationConfig: Codable {
         var forceLineCountSync: Bool = false
+        var includePreviousContext: Bool = false
+        var previousContextChapterCount: Int = 1
+        
+        // Custom init for backward compatibility.
+        // If an old project file is loaded, it won't have the new keys.
+        // This prevents decoding from failing.
+        enum CodingKeys: String, CodingKey {
+            case forceLineCountSync, includePreviousContext, previousContextChapterCount
+        }
+
+        init() {} // Default initializer for new projects or missing config
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.forceLineCountSync = try container.decodeIfPresent(Bool.self, forKey: .forceLineCountSync) ?? false
+            self.includePreviousContext = try container.decodeIfPresent(Bool.self, forKey: .includePreviousContext) ?? false
+            self.previousContextChapterCount = try container.decodeIfPresent(Int.self, forKey: .previousContextChapterCount) ?? 1
+        }
     }
 
     init(name: String, sourceLanguage: String, targetLanguage: String, description: String? = nil) {

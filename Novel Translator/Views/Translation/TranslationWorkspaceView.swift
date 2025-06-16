@@ -16,6 +16,7 @@ struct TranslationWorkspaceView: View {
     @State private var isPresetsViewPresented = false
     @State private var isPromptPreviewPresented = false
     @State private var promptPreviewText = ""
+    @State private var isGeneratingPromptPreview = false
     
     // State passed to handlers
     @State private var entryToDisplay: GlossaryEntry?
@@ -103,25 +104,79 @@ struct TranslationWorkspaceView: View {
     // MARK: - Helper Methods
     
     private func generatePromptPreview() {
-        guard let chapter = workspaceViewModel.activeChapter else {
-            self.promptPreviewText = "Error: Could not generate prompt. No active chapter."
-            self.isPromptPreviewPresented = true
-            return
+        isGeneratingPromptPreview = true
+        promptPreviewText = "" // Clear old text to ensure loading state is clean
+        isPromptPreviewPresented = true
+        
+        Task {
+            // Capture data for the background task. Accessing observed objects is fine.
+            guard let chapter = workspaceViewModel.activeChapter else {
+                await MainActor.run {
+                    self.promptPreviewText = "Error: Could not generate prompt. No active chapter."
+                    self.isGeneratingPromptPreview = false
+                }
+                return
+            }
+            
+            let generatedText = await generatePromptText(
+                chapter: chapter,
+                config: project.translationConfig,
+                allChapters: project.chapters,
+                glossary: project.glossaryEntries,
+                sourceLang: project.sourceLanguage,
+                targetLang: project.targetLanguage,
+                settings: projectManager.settings
+            )
+            
+            // Update UI on main thread
+            await MainActor.run {
+                self.promptPreviewText = generatedText
+                self.isGeneratingPromptPreview = false
+            }
+        }
+    }
+
+    private func generatePromptText(
+        chapter: Chapter,
+        config: TranslationProject.TranslationConfig,
+        allChapters: [Chapter],
+        glossary: [GlossaryEntry],
+        sourceLang: String,
+        targetLang: String,
+        settings: AppSettings
+    ) async -> String {
+        // This heavy work is now done in a background-compatible way.
+        var previousContextText: String? = nil
+        if config.includePreviousContext {
+            let sortedChapters = allChapters.sorted { $0.chapterNumber < $1.chapterNumber }
+            if let currentChapterIndex = sortedChapters.firstIndex(where: { $0.id == chapter.id }) {
+                let count = config.previousContextChapterCount
+                let startIndex = max(0, currentChapterIndex - count)
+                let endIndex = currentChapterIndex
+                
+                if startIndex < endIndex {
+                    let contextChapters = sortedChapters[startIndex..<endIndex]
+                    previousContextText = contextChapters
+                        .compactMap { $0.translatedContent }
+                        .filter { !$0.isEmpty }
+                        .joined(separator: "\n\n---\n\n")
+                }
+            }
         }
 
         let promptBuilder = PromptBuilder()
-        let selectedPreset = projectManager.settings.promptPresets.first { $0.id == projectManager.settings.selectedPromptPresetID }
-        let matches = GlossaryMatcher().detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
+        let selectedPreset = settings.promptPresets.first { $0.id == settings.selectedPromptPresetID }
+        let matches = GlossaryMatcher().detectTerms(in: chapter.rawContent, from: glossary)
 
-        self.promptPreviewText = promptBuilder.buildTranslationPrompt(
+        return promptBuilder.buildTranslationPrompt(
             text: chapter.rawContent,
             glossaryMatches: matches,
-            sourceLanguage: project.sourceLanguage,
-            targetLanguage: project.targetLanguage,
+            sourceLanguage: sourceLang,
+            targetLanguage: targetLang,
             preset: selectedPreset,
-            config: project.translationConfig
+            config: config,
+            previousContext: previousContextText
         )
-        self.isPromptPreviewPresented = true
     }
     
     // MARK: - Extracted Subviews
@@ -145,18 +200,25 @@ struct TranslationWorkspaceView: View {
             HStack {
                 Text("Generated Prompt Preview").font(.title2)
                 Spacer()
-                TokenCounterView(text: promptPreviewText, projectManager: projectManager, autoCount: true)
+                if !isGeneratingPromptPreview {
+                    TokenCounterView(text: promptPreviewText, projectManager: projectManager, autoCount: true)
+                }
             }
             .padding()
             
-            ScrollView {
-                Text(promptPreviewText)
-                    .font(.body.monospaced())
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
+            if isGeneratingPromptPreview {
+                ProgressView("Generating prompt...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    Text(promptPreviewText)
+                        .font(.body.monospaced())
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .background(Color(NSColor.textBackgroundColor)).cornerRadius(8).padding(.horizontal)
             }
-            .background(Color(NSColor.textBackgroundColor)).cornerRadius(8).padding(.horizontal)
 
             Divider().padding(.top)
 

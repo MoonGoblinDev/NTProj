@@ -48,6 +48,27 @@ class TranslationViewModel {
         
         let selectedPreset = settings.promptPresets.first { $0.id == settings.selectedPromptPresetID }
         
+        // --- NEW: Context gathering logic ---
+        var previousContextText: String? = nil
+        if project.translationConfig.includePreviousContext {
+            // Sort chapters to be sure of order
+            let sortedChapters = project.chapters.sorted { $0.chapterNumber < $1.chapterNumber }
+            if let currentChapterIndex = sortedChapters.firstIndex(where: { $0.id == chapter.id }) {
+                let count = project.translationConfig.previousContextChapterCount
+                let startIndex = max(0, currentChapterIndex - count)
+                let endIndex = currentChapterIndex
+                
+                if startIndex < endIndex {
+                    let contextChapters = sortedChapters[startIndex..<endIndex]
+                    previousContextText = contextChapters
+                        .compactMap { $0.translatedContent }
+                        .filter { !$0.isEmpty }
+                        .joined(separator: "\n\n---\n\n") // Separator between chapters
+                }
+            }
+        }
+        // --- END NEW ---
+
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
         // UPDATED: Pass the project's translationConfig to the builder
         let prompt = promptBuilder.buildTranslationPrompt(
@@ -56,7 +77,8 @@ class TranslationViewModel {
             sourceLanguage: project.sourceLanguage,
             targetLanguage: project.targetLanguage,
             preset: selectedPreset,
-            config: project.translationConfig // Pass the new config
+            config: project.translationConfig, // Pass the new config
+            previousContext: previousContextText
         )
         
         do {

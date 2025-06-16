@@ -17,9 +17,21 @@ class PromptBuilder {
         sourceLanguage: String,
         targetLanguage: String,
         preset: PromptPreset?,
-        config: TranslationProject.TranslationConfig
+        config: TranslationProject.TranslationConfig,
+        previousContext: String?
     ) -> String {
         var promptComponents: [String] = []
+        
+        // Prepend previous chapter context if available
+        if let context = previousContext, !context.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            promptComponents.append("""
+            --- PREVIOUS CHAPTERS CONTEXT START ---
+            Here is the translated text from the preceding chapter(s) for context and style continuity. Do not translate this part, only use it as a reference.
+            
+            \(context)
+            --- PREVIOUS CHAPTERS CONTEXT END ---
+            """)
+        }
         
         // 1. Build the one-shot example block if provided
         if let exampleBlock = buildExampleBlock(from: preset, config: config) {

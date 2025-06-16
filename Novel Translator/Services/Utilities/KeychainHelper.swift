@@ -11,6 +11,7 @@ import Security
 // A basic Keychain helper for storing API keys securely.
 class KeychainHelper {
 
+    @discardableResult
     static func save(key: String, data: Data) -> OSStatus {
         let query = [
             kSecClass: kSecClassGenericPassword as String,
@@ -22,6 +23,7 @@ class KeychainHelper {
         return SecItemAdd(query as CFDictionary, nil)
     }
     
+    @discardableResult
     static func save(key: String, stringValue: String) -> OSStatus {
         guard let data = stringValue.data(using: .utf8) else {
             return errSecParam
@@ -52,6 +54,7 @@ class KeychainHelper {
         return String(data: data, encoding: .utf8)
     }
 
+    @discardableResult
     static func delete(key: String) -> OSStatus {
         let query = [
             kSecClass: kSecClassGenericPassword,

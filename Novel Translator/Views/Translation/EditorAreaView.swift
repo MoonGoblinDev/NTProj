@@ -145,12 +145,30 @@ struct EditorAreaView: View {
         .tint(.gray)
         .buttonStyle(.borderedProminent)
         .popover(isPresented: $isConfigPopoverShown, arrowEdge: .bottom) {
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 12) {
                 Toggle("Force Line Count Sync", isOn: $project.translationConfig.forceLineCountSync)
                     .onChange(of: project.translationConfig.forceLineCountSync) { _, _ in
                         project.lastModifiedDate = Date()
-                        projectManager.isProjectDirty = true
+                        projectManager.saveProject()
                     }
+                
+                Divider()
+                
+                HStack {
+                    Toggle("Include previous chapter as context", isOn: $project.translationConfig.includePreviousContext)
+                        .onChange(of: project.translationConfig.includePreviousContext) { _, _ in
+                            project.lastModifiedDate = Date()
+                            projectManager.saveProject()
+                        }
+                    Stepper(value: $project.translationConfig.previousContextChapterCount, in: 1...5) {
+                        Text("\(project.translationConfig.previousContextChapterCount)")
+                    }
+                    .disabled(!project.translationConfig.includePreviousContext)
+                    .onChange(of: project.translationConfig.previousContextChapterCount) { _, _ in
+                        project.lastModifiedDate = Date()
+                        projectManager.saveProject()
+                    }
+                }
             }
             .padding()
         }
