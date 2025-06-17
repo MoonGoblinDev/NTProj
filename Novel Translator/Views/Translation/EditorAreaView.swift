@@ -59,27 +59,6 @@ struct EditorAreaView: View {
                     
                     editorWithButtons(chapter: chapter, editorState: editorState)
                 }
-
-                if isEditorSearchActive {
-                    EditorSearchView(
-                        searchQuery: $searchViewModel.searchQuery,
-                        totalResults: searchViewModel.searchResults.count,
-                        currentResultIndex: $searchViewModel.currentResultIndex,
-                        onFindNext: { findNextMatch() },
-                        onFindPrevious: { findPreviousMatch() },
-                        onClose: {
-                            isEditorSearchActive = false
-                            searchViewModel.searchQuery = "" // Triggers onChange to clear search
-                        }
-                    )
-                    .padding(.top, 45) // Position below tabs
-                }
-            }
-            .background(
-                Button("") { isEditorSearchActive.toggle() }
-                .keyboardShortcut("f", modifiers: .command)
-                .hidden()
-            )
             .onAppear {
                 // Initial load when the view appears for the first time
                 updateGlossaryAndHighlights()

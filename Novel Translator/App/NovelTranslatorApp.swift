@@ -6,6 +6,7 @@ struct NovelTranslatorApp: App {
     @StateObject private var projectManager = ProjectManager()
     @StateObject private var workspaceViewModel = WorkspaceViewModel()
 
+
     var body: some Scene {
         Window("Novel Translator", id: "main") {
             ContentView()
@@ -37,7 +38,9 @@ struct NovelTranslatorApp: App {
                     projectManager.closeProject()
                 }
                 .disabled(projectManager.currentProject == nil)
+            
             }
+            TextEditingCommands()
         }
     }
     
