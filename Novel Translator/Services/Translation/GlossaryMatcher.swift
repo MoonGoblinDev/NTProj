@@ -31,7 +31,6 @@ class GlossaryMatcher {
         }
         
         // Return all found matches, sorted by their position in the text.
-        // This is crucial for the highlighting view to render them correctly.
         return matches.sorted { $0.range.lowerBound < $1.range.lowerBound }
     }
 }

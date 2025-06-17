@@ -27,5 +27,4 @@ class AppContext: ObservableObject {
     
 
     @Published var isSheetPresented: Bool = false
-    @Published var searchResultToHighlight: SearchResultItem?
 }

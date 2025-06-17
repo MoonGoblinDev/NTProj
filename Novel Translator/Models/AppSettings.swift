@@ -26,9 +26,6 @@ struct AppSettings: Codable {
     var selectedModel: String = ""
     var selectedPromptPresetID: UUID?
 
-    // New setting for disabling glossary highlighting
-    var disableGlossaryHighlighting: Bool = false
-
     /// Default initializer for the first launch.
     init() {
         // Initialize with default API provider configs

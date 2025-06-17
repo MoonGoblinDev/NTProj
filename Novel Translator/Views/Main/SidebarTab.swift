@@ -11,7 +11,6 @@ import Foundation
 enum SidebarTab: String, CaseIterable {
     case chapters = "Chapters"
     case glossary = "Glossary"
-    case search = "Search"
     case settings = "Settings"
     case stats = "Statistics"
     
@@ -19,7 +18,6 @@ enum SidebarTab: String, CaseIterable {
         switch self {
         case .chapters: "book.pages.fill"
         case .glossary: "books.vertical.fill"
-        case .search: "magnifyingglass"
         case .settings: "gear"
         case .stats: "chart.xyaxis.line"
         }

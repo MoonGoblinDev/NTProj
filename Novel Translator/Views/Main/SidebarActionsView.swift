@@ -29,7 +29,7 @@ struct SidebarActionsView: View {
                 } label: {
                     Label("Add Entry", systemImage: "plus")
                 }
-            case .settings, .stats, .search: // UPDATED
+            case .settings, .stats: // UPDATED
                 // No action button for these tabs
                 EmptyView()
             }
