@@ -1,3 +1,5 @@
+// FILE: Novel Translator/Models/ViewModels/TranslationViewModel.swift
+
 import SwiftUI
 
 @Observable
@@ -6,8 +8,8 @@ class TranslationViewModel {
     var isTranslating: Bool = false
     var errorMessage: String?
     
-    // This property will be bound to the TextEditor for live updates.
-    var translationText: String = ""
+    // REMOVED: This property was the source of the state conflict.
+    // var translationText: String = ""
     
     private var translationService: TranslationService
     
@@ -15,14 +17,11 @@ class TranslationViewModel {
         self.translationService = TranslationService()
     }
     
-    // Sets the initial text in the editor when a chapter is selected.
-    func setChapter(_ chapter: Chapter?) {
-        // Don't overwrite text if a translation is in progress
-        guard !isTranslating else { return }
-        self.translationText = chapter?.translatedContent ?? ""
-    }
+    // REMOVED: This method was unused and part of the faulty pattern.
+    // func setChapter(_ chapter: Chapter?) { ... }
     
-    func streamTranslateChapter(project: TranslationProject, chapter: Chapter, settings: AppSettings) async {
+    // MODIFIED: This function now accepts the WorkspaceViewModel to directly update state.
+    func streamTranslateChapter(project: TranslationProject, chapter: Chapter, settings: AppSettings, workspace: WorkspaceViewModel) async {
         let activeProvider = settings.selectedProvider ?? .google
         
         guard let apiConfig = settings.apiConfigurations.first(where: { $0.provider == activeProvider }) else {
@@ -37,7 +36,10 @@ class TranslationViewModel {
         
         isTranslating = true
         errorMessage = nil
-        translationText = "" // Clear previous translation
+        // MODIFIED: Use a local variable for accumulation.
+        var accumulatedText = ""
+        // Clear previous translation directly in the editor state.
+        workspace.activeEditorState?.updateTranslation(newText: "")
         
         let startTime = Date()
         var finalInputTokens: Int?
@@ -48,7 +50,7 @@ class TranslationViewModel {
         
         let selectedPreset = settings.promptPresets.first { $0.id == settings.selectedPromptPresetID }
         
-        // --- NEW: Context gathering logic ---
+        // --- Context gathering logic (unchanged) ---
         var previousContextText: String? = nil
         if project.translationConfig.includePreviousContext {
             // Sort chapters to be sure of order
@@ -67,17 +69,15 @@ class TranslationViewModel {
                 }
             }
         }
-        // --- END NEW ---
 
         let matches = glossaryMatcher.detectTerms(in: chapter.rawContent, from: project.glossaryEntries)
-        // UPDATED: Pass the project's translationConfig to the builder
         let prompt = promptBuilder.buildTranslationPrompt(
             text: chapter.rawContent,
             glossaryMatches: matches,
             sourceLanguage: project.sourceLanguage,
             targetLanguage: project.targetLanguage,
             preset: selectedPreset,
-            config: project.translationConfig, // Pass the new config
+            config: project.translationConfig,
             previousContext: previousContextText
         )
         
@@ -88,19 +88,22 @@ class TranslationViewModel {
             let stream = llmService.streamTranslate(request: request)
             
             for try await chunk in stream {
-                translationText += chunk.textChunk
+                // MODIFIED: Update local variable and call editor state update.
+                accumulatedText += chunk.textChunk
+                workspace.activeEditorState?.updateTranslation(newText: accumulatedText)
+
                 if chunk.isFinal {
                     finalInputTokens = chunk.inputTokens
                     finalOutputTokens = chunk.outputTokens
                 }
             }
             
-            // --- NEW: Post-processing step ---
-            var finalFullText = translationText
+            // --- Post-processing step ---
+            var finalFullText = accumulatedText // Use the local variable
             if project.translationConfig.forceLineCountSync {
                 finalFullText = promptBuilder.postprocessLineSync(text: finalFullText)
                 // Update the UI one last time with the cleaned text
-                translationText = finalFullText
+                workspace.activeEditorState?.updateTranslation(newText: finalFullText)
             }
 
             // Once the stream is finished, save the final result to the in-memory model.

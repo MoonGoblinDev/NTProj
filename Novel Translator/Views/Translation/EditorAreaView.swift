@@ -172,7 +172,8 @@ struct EditorAreaView: View {
     private func translateButton(chapter: Chapter) -> some View {
         Button("Translate", systemImage: "sparkles") {
             Task {
-                await translationViewModel.streamTranslateChapter(project: project, chapter: chapter, settings: projectManager.settings)
+                // MODIFIED: Pass the workspaceViewModel to the updated function.
+                await translationViewModel.streamTranslateChapter(project: project, chapter: chapter, settings: projectManager.settings, workspace: workspaceViewModel)
             }
         }
         .buttonStyle(.borderedProminent)

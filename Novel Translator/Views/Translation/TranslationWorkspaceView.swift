@@ -33,26 +33,26 @@ struct TranslationWorkspaceView: View {
 
     var body: some View {
         let mainContent = ZStack {
-            if viewModel != nil {
-                EditorAreaView(
-                    project: project,
-                    translationViewModel: viewModel,
-                    onShowPromptPreview: generatePromptPreview
-                )
-                .environmentObject(appContext) // Pass AppContext to EditorAreaView
-                .background {
-                    // Compose the small, single-purpose logic handlers.
-                    TranslationTextChangeHandler(viewModel: viewModel)
-                    GlossaryPopupHandler(entryToDisplay: $entryToDisplay)
+                    if viewModel != nil {
+                        EditorAreaView(
+                            project: project,
+                            translationViewModel: viewModel,
+                            onShowPromptPreview: generatePromptPreview
+                        )
+                        .environmentObject(appContext)
+                        // MODIFIED: The .background modifier is now simplified.
+                        .background {
+                            // The problematic handler is removed.
+                            GlossaryPopupHandler(entryToDisplay: $entryToDisplay)
+                        }
+                    } else {
+                        initialPlaceholderView
+                    }
+                    
+                    if viewModel?.isTranslating == true {
+                        loadingOverlay
+                    }
                 }
-            } else {
-                initialPlaceholderView
-            }
-            
-            if viewModel?.isTranslating == true {
-                loadingOverlay
-            }
-        }
         .navigationTitle("")
         .toolbar {
             if viewModel != nil {
@@ -246,21 +246,6 @@ struct TranslationWorkspaceView: View {
 }
 
 // MARK: - Private Logic Handler Views
-
-/// Handles updates to the translation text editor.
-private struct TranslationTextChangeHandler: View {
-    @EnvironmentObject var workspaceViewModel: WorkspaceViewModel
-    let viewModel: TranslationViewModel
-
-    var body: some View {
-        EmptyView()
-            .onChange(of: viewModel.translationText) { _, newText in
-                if let state = workspaceViewModel.activeEditorState {
-                    state.updateTranslation(newText: newText)
-                }
-            }
-    }
-}
 
 /// Handles displaying the glossary detail sheet when an item is selected globally.
 private struct GlossaryPopupHandler: View {
