@@ -59,6 +59,12 @@ struct EditorAreaView: View {
                     
                     editorWithButtons(chapter: chapter, editorState: editorState)
                 }
+            }
+            .background(
+                Button("") { isEditorSearchActive.toggle() }
+                .keyboardShortcut("f", modifiers: .command)
+                .hidden()
+            )
             .onAppear {
                 // Initial load when the view appears for the first time
                 updateGlossaryAndHighlights()
