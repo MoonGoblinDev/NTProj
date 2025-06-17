@@ -20,7 +20,6 @@ struct TranslationWorkspaceView: View {
     
     // State passed to handlers
     @State private var entryToDisplay: GlossaryEntry?
-    @State private var glossaryMatches: [GlossaryMatch] = []
     
     // Computed binding for error alert
     private var isErrorAlertPresented: Binding<Bool> {
@@ -38,17 +37,13 @@ struct TranslationWorkspaceView: View {
                 EditorAreaView(
                     project: project,
                     translationViewModel: viewModel,
-                    glossaryMatches: $glossaryMatches,
                     onShowPromptPreview: generatePromptPreview
                 )
+                .environmentObject(appContext) // Pass AppContext to EditorAreaView
                 .background {
                     // Compose the small, single-purpose logic handlers.
-                    // This is the key to solving the compiler timeout issue.
                     TranslationTextChangeHandler(viewModel: viewModel)
-                    GlossaryLogicHandler(
-                        entryToDisplay: $entryToDisplay,
-                        glossaryMatches: $glossaryMatches
-                    )
+                    GlossaryPopupHandler(entryToDisplay: $entryToDisplay)
                     SearchNavigationHandler()
                 }
             } else {
@@ -268,41 +263,19 @@ private struct TranslationTextChangeHandler: View {
     }
 }
 
-/// Handles all logic related to the glossary (highlighting, selection, editing).
-private struct GlossaryLogicHandler: View {
+/// Handles displaying the glossary detail sheet when an item is selected globally.
+private struct GlossaryPopupHandler: View {
     @EnvironmentObject private var appContext: AppContext
     @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel
     
     @Binding var entryToDisplay: GlossaryEntry?
-    @Binding var glossaryMatches: [GlossaryMatch]
-
-    private let glossaryMatcher = GlossaryMatcher()
     private var project: TranslationProject? { workspaceViewModel.project }
-    private var activeChapter: Chapter? { workspaceViewModel.activeChapter }
 
     var body: some View {
         EmptyView()
-            .onAppear { updateGlossaryMatches() }
-            .onChange(of: activeChapter?.id) { updateGlossaryMatches() }
-            .onChange(of: workspaceViewModel.activeEditorState?.sourceAttributedText) { updateGlossaryMatches() }
-            .onChange(of: workspaceViewModel.activeEditorState?.sourceSelection) { _, newSelection in handleGlossarySelection(newSelection) }
-            .onChange(of: appContext.glossaryEntryToEditID) { _, newID in handleGlossaryIDChange(newID) }
-    }
-    
-    private func updateGlossaryMatches() {
-        guard let state = workspaceViewModel.activeEditorState, let proj = project else {
-            glossaryMatches = []; return
-        }
-        let text = String(state.sourceAttributedText.characters)
-        glossaryMatches = text.isEmpty ? [] : glossaryMatcher.detectTerms(in: text, from: proj.glossaryEntries)
-    }
-    
-    private func handleGlossarySelection(_ selection: NSRange?) {
-        guard let state = workspaceViewModel.activeEditorState, let selection = selection, selection.length == 0 else { return }
-        let text = String(state.sourceAttributedText.characters)
-        if let match = glossaryMatches.first(where: { NSLocationInRange(selection.location, $0.range.toNSRange(in: text)) }) {
-             appContext.glossaryEntryToEditID = match.entry.id
-        }
+            .onChange(of: appContext.glossaryEntryToEditID) { _, newID in
+                handleGlossaryIDChange(newID)
+            }
     }
     
     private func handleGlossaryIDChange(_ newID: UUID?) {
@@ -312,6 +285,7 @@ private struct GlossaryLogicHandler: View {
         entryToDisplay = proj.glossaryEntries.first(where: { $0.id == newID })
     }
 }
+
 
 /// Handles navigation from project-wide search results.
 private struct SearchNavigationHandler: View {

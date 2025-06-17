@@ -11,7 +11,7 @@ import Foundation
 struct ProjectMetadata: Codable, Identifiable, Hashable {
     var id: UUID
     var name: String
-    var bookmarkData: Data 
+    var bookmarkData: Data
     var lastOpened: Date
 }
 
@@ -25,6 +25,9 @@ struct AppSettings: Codable {
     var selectedProvider: APIConfiguration.APIProvider?
     var selectedModel: String = ""
     var selectedPromptPresetID: UUID?
+
+    // New setting for disabling glossary highlighting
+    var disableGlossaryHighlighting: Bool = false
 
     /// Default initializer for the first launch.
     init() {

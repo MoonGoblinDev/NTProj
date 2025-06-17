@@ -28,6 +28,20 @@ struct ProjectSettingsView: View {
                     isAPISettingsPresented = true
                 }
             }
+
+            // New section for editor settings
+            Section("Editor Settings") {
+                Toggle(isOn: $projectManager.settings.disableGlossaryHighlighting) {
+                    Text("Disable Glossary Highlighting")
+                    Text("Turn this on to improve performance on large chapters or to debug editor jitter.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .onChange(of: projectManager.settings.disableGlossaryHighlighting) { _, _ in
+                    // Save the settings whenever the toggle is changed.
+                    projectManager.saveSettings()
+                }
+            }
             
             Section("Import Settings") {
                 // In a future update, this could be a sheet too.

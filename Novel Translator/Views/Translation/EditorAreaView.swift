@@ -11,13 +11,13 @@ struct EditorAreaView: View {
     // Environment
     @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel
     @EnvironmentObject private var projectManager: ProjectManager
+    @EnvironmentObject private var appContext: AppContext
     
     // Parent Models & State
     @ObservedObject var project: TranslationProject
     var translationViewModel: TranslationViewModel
     
     // Bindings from parent
-    @Binding var glossaryMatches: [GlossaryMatch]
     let onShowPromptPreview: () -> Void
 
     // Local State
@@ -25,6 +25,11 @@ struct EditorAreaView: View {
     @State private var isEditorSearchActive = false
     @State private var isConfigPopoverShown = false
     @State private var isGlossaryExtractionPresented = false
+    
+    // Local state for highlight management
+    @State private var glossaryMatches: [GlossaryMatch] = []
+    @State private var lastProcessedTextContent: String?
+    private let glossaryMatcher = GlossaryMatcher()
     
     // Computed Properties
     private var activeChapter: Chapter? {
@@ -75,19 +80,35 @@ struct EditorAreaView: View {
                 .keyboardShortcut("f", modifiers: .command)
                 .hidden()
             )
+            .onAppear {
+                // Initial load when the view appears for the first time
+                updateGlossaryAndHighlights()
+            }
             .onChange(of: activeChapter?.id) {
+                // When chapter changes, force a full recalculation
                 resetEditorSearch()
-                reapplyAllHighlights()
+                lastProcessedTextContent = nil
+                updateGlossaryAndHighlights()
+            }
+            .onChange(of: activeEditorState?.sourceAttributedText) {
+                // When text is typed, trigger the controlled update asynchronously.
+                // This breaks the update cycle that causes jittering.
+                DispatchQueue.main.async {
+                    updateGlossaryAndHighlights()
+                }
+            }
+            .onChange(of: activeEditorState?.sourceSelection) { _, newSelection in
+                handleGlossarySelection(newSelection)
             }
             .onChange(of: searchViewModel.searchQuery) {
                 updateEditorSearch()
             }
             .onChange(of: searchViewModel.currentResultIndex) {
                 reapplyAllHighlights()
-                navigateToCurrentMatch()
             }
-            .onChange(of: glossaryMatches) {
-                reapplyAllHighlights()
+            .onChange(of: projectManager.settings.disableGlossaryHighlighting) { _, _ in
+                // Re-calculate and apply highlights when the setting is toggled to add/remove them instantly.
+                updateGlossaryAndHighlights()
             }
             .sheet(isPresented: $isGlossaryExtractionPresented) {
                 if let chapterID = activeChapter?.id {
@@ -219,6 +240,37 @@ struct EditorAreaView: View {
 
     // MARK: - Highlighting & Search Logic
     
+    /// The main driver for glossary matching and highlighting. This function is designed
+    /// to be called only when the text content actually changes, preventing update loops.
+    private func updateGlossaryAndHighlights() {
+        guard let state = activeEditorState else {
+            self.glossaryMatches = []
+            self.lastProcessedTextContent = nil
+            return
+        }
+
+        let text = String(state.sourceAttributedText.characters)
+        
+        if text == lastProcessedTextContent {
+            return
+        }
+        
+        // 1. Conditionally run the expensive glossary detection logic.
+        if projectManager.settings.disableGlossaryHighlighting {
+            // If disabled, ensure the matches array is empty.
+            self.glossaryMatches = []
+        } else {
+            // If enabled, perform the detection.
+            self.glossaryMatches = text.isEmpty ? [] : glossaryMatcher.detectTerms(in: text, from: project.glossaryEntries)
+        }
+        
+        // 2. Store the content we just processed to use in the next check.
+        self.lastProcessedTextContent = text
+        
+        // 3. Now that matches are updated (or cleared), re-apply all visual highlights.
+        reapplyAllHighlights()
+    }
+
     private func reapplyAllHighlights() {
         guard let state = activeEditorState else { return }
         
@@ -230,15 +282,17 @@ struct EditorAreaView: View {
         attributedString[fullRange].underlineStyle = nil
         attributedString[fullRange].backgroundColor = nil
 
-        // 2. Apply glossary highlights
-        for match in glossaryMatches {
-            if let range = Range(match.range, in: attributedString) {
-                var container = AttributeContainer()
-                container.underlineStyle = .single
-                container.foregroundColor = NSColor(match.entry.category.highlightColor)
-                attributedString[range].mergeAttributes(container, mergePolicy: .keepNew)
+        // 2. Apply glossary highlights (conditionally)
+        
+            for match in glossaryMatches {
+                if let range = Range(match.range, in: attributedString) {
+                    var container = AttributeContainer()
+                    container.underlineStyle = .single
+                    container.foregroundColor = NSColor(match.entry.category.highlightColor)
+                    attributedString[range].mergeAttributes(container, mergePolicy: .keepNew)
+                }
             }
-        }
+        
         
         // 3. Apply search highlights over glossary highlights
         for range in searchViewModel.searchResults {
@@ -285,5 +339,20 @@ struct EditorAreaView: View {
         
         let range = searchViewModel.searchResults[index]
         state.sourceSelection = range
+    }
+    
+    private func handleGlossarySelection(_ selection: NSRange?) {
+        // Prevent selection logic from running if highlighting is off.
+        if projectManager.settings.disableGlossaryHighlighting { return }
+        
+        guard let state = activeEditorState,
+              let selection = selection,
+              selection.length == 0,
+              !glossaryMatches.isEmpty else { return }
+        
+        let text = String(state.sourceAttributedText.characters)
+        if let match = glossaryMatches.first(where: { NSLocationInRange(selection.location, $0.range.toNSRange(in: text)) }) {
+            appContext.glossaryEntryToEditID = match.entry.id
+        }
     }
 }
