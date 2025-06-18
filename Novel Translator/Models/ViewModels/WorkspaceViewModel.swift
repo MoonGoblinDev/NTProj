@@ -125,6 +125,28 @@ class WorkspaceViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Search & Replace Logic
+    
+    func replace(searchResult: SearchResultItem, with replacementText: String) throws {
+        guard let editorState = editorStates[searchResult.chapterID] else { return }
+        // Delegate the work to the model that owns the data
+        editorState.replace(
+            range: searchResult.absoluteMatchRange,
+            with: replacementText,
+            in: searchResult.editorType
+        )
+    }
+
+    func replaceAll(in chapterID: UUID, editorType: SearchResultItem.EditorType, with replacementText: String, from results: [SearchResultItem]) throws {
+        guard let editorState = editorStates[chapterID] else { return }
+        // Delegate the work to the model that owns the data
+        editorState.replaceAll(
+            results: results,
+            with: replacementText,
+            in: editorType
+        )
+    }
+    
     func closeAllChapters() {
         openChapterIDs.removeAll()
         activeChapterID = nil

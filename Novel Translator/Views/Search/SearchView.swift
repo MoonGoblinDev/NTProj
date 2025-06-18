@@ -65,7 +65,7 @@ struct SearchView: View {
                 SearchOptionButton(label: ".*", help: "Use Regular Expression", isOn: $useRegex)
 
                 if isReplaceSectionExpanded {
-                    Button(action: {}) { // TODO: Implement Replace All
+                    Button(action: replaceAll) {
                         Image(systemName: "arrow.2.squarepath")
                     }
                     .buttonStyle(.plain)
@@ -89,18 +89,30 @@ struct SearchView: View {
                     ForEach(searchResults) { group in
                         Section(header: Text(group.chapterTitle).lineLimit(1)) {
                             ForEach(group.results) { result in
-                                Button(action: { navigateTo(result: result) }) {
-                                    HStack(alignment: .top) {
-                                        Text("\(result.lineNumber):")
-                                            .font(.system(.body, design: .monospaced))
-                                            .foregroundStyle(.secondary)
-                                        
-                                        highlightedText(for: result)
-                                            .lineLimit(2)
+                                HStack {
+                                    Button(action: { navigateTo(result: result) }) {
+                                        HStack(alignment: .top) {
+                                            Text("\(result.lineNumber):")
+                                                .font(.system(.body, design: .monospaced))
+                                                .foregroundStyle(.secondary)
+                                            
+                                            highlightedText(for: result)
+                                                .lineLimit(2)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                        .padding(.vertical, 2)
                                     }
-                                    .padding(.vertical, 2)
+                                    .buttonStyle(.plain)
+                                    
+                                    if isReplaceSectionExpanded {
+                                        Spacer()
+                                        Button("Replace") {
+                                            replace(result: result)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .padding(.trailing, 4)
+                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -135,6 +147,48 @@ struct SearchView: View {
     private func navigateTo(result: SearchResultItem) {
         // Use the AppContext to coordinate navigation.
         appContext.searchResultToHighlight = result
+    }
+    
+    private func replace(result: SearchResultItem) {
+        do {
+            try workspaceViewModel.replace(searchResult: result, with: replaceQuery)
+            // After replacing, the search results are stale. Refresh them asynchronously.
+            DispatchQueue.main.async {
+                performSearch()
+            }
+        } catch {
+            // TODO: Show an alert for the error
+            print("Failed to replace item: \(error)")
+        }
+    }
+
+    private func replaceAll() {
+        // Group all results by chapter, then by editor type
+        let allChapterResults = searchResults.flatMap { $0.results }
+        let groupedByChapter = Dictionary(grouping: allChapterResults) { $0.chapterID }
+
+        for (chapterID, resultsInChapter) in groupedByChapter {
+            let groupedByEditor = Dictionary(grouping: resultsInChapter) { $0.editorType }
+            
+            for (editorType, editorResults) in groupedByEditor {
+                do {
+                    try workspaceViewModel.replaceAll(
+                        in: chapterID,
+                        editorType: editorType,
+                        with: replaceQuery,
+                        from: editorResults
+                    )
+                } catch {
+                    // TODO: Show an alert for the error
+                    print("Failed to replace all in chapter \(chapterID): \(error)")
+                }
+            }
+        }
+        
+        // After all replacements, refresh the search to update the UI.
+        DispatchQueue.main.async {
+            performSearch()
+        }
     }
     
     private func highlightedText(for result: SearchResultItem) -> Text {

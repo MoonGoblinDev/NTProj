@@ -80,6 +80,13 @@ struct EditorAreaView: View {
             .onChange(of: activeEditorState?.sourceSelection) { _, newSelection in
                 handleGlossarySelection(newSelection)
             }
+            .onChange(of: appContext.searchResultToHighlight) { _, newResult in
+                if let result = newResult {
+                    handleSearchResultNavigation(result)
+                    // Clear the highlight request so it can be triggered again for the same item.
+                    appContext.searchResultToHighlight = nil
+                }
+            }
             .onChange(of: searchViewModel.searchQuery) {
                 updateEditorSearch()
             }
@@ -219,6 +226,24 @@ struct EditorAreaView: View {
         }
     }
     // MARK: - Highlighting & Search Logic
+
+    private func handleSearchResultNavigation(_ result: SearchResultItem) {
+        // 1. Open the chapter if it's not already open and make it active.
+        workspaceViewModel.openChapter(id: result.chapterID)
+        
+        // The view might need a moment to update after opening a new chapter.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard let editorState = workspaceViewModel.editorStates[result.chapterID] else { return }
+            
+            // 2. Set the selection in the correct editor pane, which also scrolls to it.
+            switch result.editorType {
+            case .source:
+                editorState.sourceSelection = result.absoluteMatchRange
+            case .translated:
+                editorState.translatedSelection = result.absoluteMatchRange
+            }
+        }
+    }
     
     /// The main driver for glossary matching and highlighting. This function is designed
     /// to be called only when the text content actually changes, preventing update loops.
