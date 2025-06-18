@@ -33,27 +33,26 @@ struct TranslationWorkspaceView: View {
 
     var body: some View {
         let mainContent = ZStack {
-            if viewModel != nil {
-                EditorAreaView(
-                    project: project,
-                    translationViewModel: viewModel,
-                    onShowPromptPreview: generatePromptPreview
-                )
-                .environmentObject(appContext) // Pass AppContext to EditorAreaView
-                .background {
-                    // Compose the small, single-purpose logic handlers.
-                    TranslationTextChangeHandler(viewModel: viewModel)
-                    GlossaryPopupHandler(entryToDisplay: $entryToDisplay)
-                    SearchNavigationHandler()
+                    if viewModel != nil {
+                        EditorAreaView(
+                            project: project,
+                            translationViewModel: viewModel,
+                            onShowPromptPreview: generatePromptPreview
+                        )
+                        .environmentObject(appContext)
+                        // MODIFIED: The .background modifier is now simplified.
+                        .background {
+                            // The problematic handler is removed.
+                            GlossaryPopupHandler(entryToDisplay: $entryToDisplay)
+                        }
+                    } else {
+                        initialPlaceholderView
+                    }
+                    
+                    if viewModel?.isTranslating == true {
+                        loadingOverlay
+                    }
                 }
-            } else {
-                initialPlaceholderView
-            }
-            
-            if viewModel?.isTranslating == true {
-                loadingOverlay
-            }
-        }
         .navigationTitle("")
         .toolbar {
             if viewModel != nil {
@@ -248,21 +247,6 @@ struct TranslationWorkspaceView: View {
 
 // MARK: - Private Logic Handler Views
 
-/// Handles updates to the translation text editor.
-private struct TranslationTextChangeHandler: View {
-    @EnvironmentObject var workspaceViewModel: WorkspaceViewModel
-    let viewModel: TranslationViewModel
-
-    var body: some View {
-        EmptyView()
-            .onChange(of: viewModel.translationText) { _, newText in
-                if let state = workspaceViewModel.activeEditorState {
-                    state.updateTranslation(newText: newText)
-                }
-            }
-    }
-}
-
 /// Handles displaying the glossary detail sheet when an item is selected globally.
 private struct GlossaryPopupHandler: View {
     @EnvironmentObject private var appContext: AppContext
@@ -283,47 +267,5 @@ private struct GlossaryPopupHandler: View {
             entryToDisplay = nil; return
         }
         entryToDisplay = proj.glossaryEntries.first(where: { $0.id == newID })
-    }
-}
-
-
-/// Handles navigation from project-wide search results.
-private struct SearchNavigationHandler: View {
-    @EnvironmentObject private var appContext: AppContext
-    @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel
-
-    var body: some View {
-        EmptyView()
-            .onChange(of: appContext.searchResultToHighlight) { _, result in
-                handleSearchResultNavigation(result)
-            }
-    }
-
-    private func handleSearchResultNavigation(_ result: SearchResultItem?) {
-        guard let result = result else { return }
-        
-        workspaceViewModel.openChapter(id: result.chapterID)
-        
-        Task {
-            while workspaceViewModel.activeChapterID != result.chapterID { await Task.yield() }
-            
-            guard let state = workspaceViewModel.activeEditorState else { return }
-            
-            let fullText = (result.editorType == .source) ? String(state.sourceAttributedText.characters) : String(state.translatedAttributedText.characters)
-            let lines = fullText.components(separatedBy: .newlines)
-            
-            guard result.lineNumber - 1 < lines.count else { return }
-            
-            let charactersUpToLine = lines.prefix(result.lineNumber - 1).map { $0.utf16.count + 1 }.reduce(0, +)
-            let absoluteLocation = charactersUpToLine + result.matchRangeInLine.location
-            let finalRange = NSRange(location: absoluteLocation, length: result.matchRangeInLine.length)
-            
-            if result.editorType == .source {
-                state.sourceSelection = finalRange
-            } else {
-                state.translatedSelection = finalRange
-            }
-            appContext.searchResultToHighlight = nil
-        }
     }
 }

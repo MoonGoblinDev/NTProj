@@ -13,33 +13,33 @@ struct EditorAreaView: View {
     @EnvironmentObject private var projectManager: ProjectManager
     @EnvironmentObject private var appContext: AppContext
     
+    // Local state for highlight management
+    @State private var glossaryMatches: [GlossaryMatch] = []
+    @State private var lastProcessedTextContent: String?
+    private let glossaryMatcher = GlossaryMatcher()
+    
     // Parent Models & State
     @ObservedObject var project: TranslationProject
     var translationViewModel: TranslationViewModel
     
     // Bindings from parent
     let onShowPromptPreview: () -> Void
-
+    
     // Local State
     @State private var searchViewModel = EditorSearchViewModel()
     @State private var isEditorSearchActive = false
     @State private var isConfigPopoverShown = false
     @State private var isGlossaryExtractionPresented = false
     
-    // Local state for highlight management
-    @State private var glossaryMatches: [GlossaryMatch] = []
-    @State private var lastProcessedTextContent: String?
-    private let glossaryMatcher = GlossaryMatcher()
-    
     // Computed Properties
     private var activeChapter: Chapter? {
         workspaceViewModel.activeChapter
     }
-
+    
     private var activeEditorState: ChapterEditorState? {
         workspaceViewModel.activeEditorState
     }
-
+    
     private var isSourceTextEmpty: Bool {
         guard let state = activeEditorState else { return true }
         // Use the explicit String initializer to get the content reliably.
@@ -50,7 +50,7 @@ struct EditorAreaView: View {
         guard let state = activeEditorState else { return true }
         return String(state.translatedAttributedText.characters).isEmpty
     }
-
+    
     var body: some View {
         if let chapter = activeChapter, let editorState = activeEditorState {
             ZStack(alignment: .top) {
@@ -60,11 +60,6 @@ struct EditorAreaView: View {
                     editorWithButtons(chapter: chapter, editorState: editorState)
                 }
             }
-            .background(
-                Button("") { isEditorSearchActive.toggle() }
-                .keyboardShortcut("f", modifiers: .command)
-                .hidden()
-            )
             .onAppear {
                 // Initial load when the view appears for the first time
                 updateGlossaryAndHighlights()
@@ -139,9 +134,9 @@ struct EditorAreaView: View {
             }
         }
     }
-
+    
     // MARK: - Overlay Buttons
-
+    
     private var configButton: some View {
         Button {
             isConfigPopoverShown.toggle()
@@ -201,19 +196,20 @@ struct EditorAreaView: View {
     
     private func promptPreviewButton(chapter: Chapter) -> some View {
         Button("Prompt Preview", systemImage: "sparkles.square.filled.on.square", action: onShowPromptPreview)
-        .tint(.gray)
-        .buttonStyle(.borderedProminent)
-        .help("Show the final prompt that will be sent to the AI")
-        .disabled(isSourceTextEmpty)
-        .onHover { isHovering in
-            if isHovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
-        }
+            .tint(.gray)
+            .buttonStyle(.borderedProminent)
+            .help("Show the final prompt that will be sent to the AI")
+            .disabled(isSourceTextEmpty)
+            .onHover { isHovering in
+                if isHovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+            }
     }
     
     private func translateButton(chapter: Chapter) -> some View {
         Button("Translate", systemImage: "sparkles") {
             Task {
-                await translationViewModel.streamTranslateChapter(project: project, chapter: chapter, settings: projectManager.settings)
+                // MODIFIED: Pass the workspaceViewModel to the updated function.
+                await translationViewModel.streamTranslateChapter(project: project, chapter: chapter, settings: projectManager.settings, workspace: workspaceViewModel)
             }
         }
         .buttonStyle(.borderedProminent)
@@ -222,7 +218,6 @@ struct EditorAreaView: View {
             if isHovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
         }
     }
-
     // MARK: - Highlighting & Search Logic
     
     /// The main driver for glossary matching and highlighting. This function is designed
