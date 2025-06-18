@@ -1,10 +1,3 @@
-//
-//  EditorAreaView.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 16/06/25.
-//
-
 import SwiftUI
 
 struct EditorAreaView: View {
@@ -52,66 +45,68 @@ struct EditorAreaView: View {
     }
     
     var body: some View {
-        if let chapter = activeChapter, let editorState = activeEditorState {
-            ZStack(alignment: .top) {
-                VStack(spacing: 0) {
-                    ChapterTabsView(workspaceViewModel: workspaceViewModel, project: project)
-                    
-                    editorWithButtons(chapter: chapter, editorState: editorState)
+        Group {
+            if let chapter = activeChapter, let editorState = activeEditorState {
+                ZStack(alignment: .top) {
+                    VStack(spacing: 0) {
+                        ChapterTabsView(workspaceViewModel: workspaceViewModel, project: project)
+                        
+                        editorWithButtons(chapter: chapter, editorState: editorState)
+                    }
                 }
-            }
-            .onAppear {
-                // Initial load when the view appears for the first time
-                updateGlossaryAndHighlights()
-            }
-            .onChange(of: activeChapter?.id) {
-                // When chapter changes, force a full recalculation
-                resetEditorSearch()
-                lastProcessedTextContent = nil
-                updateGlossaryAndHighlights()
-            }
-            .onChange(of: activeEditorState?.sourceAttributedText) {
-                // When text is typed, trigger the controlled update asynchronously.
-                // This breaks the update cycle that causes jittering.
-                DispatchQueue.main.async {
+                .onAppear {
+                    // Initial load when the view appears for the first time
                     updateGlossaryAndHighlights()
                 }
-            }
-            .onChange(of: activeEditorState?.sourceSelection) { _, newSelection in
-                handleGlossarySelection(newSelection)
-            }
-            .onChange(of: appContext.searchResultToHighlight) { _, newResult in
-                if let result = newResult {
-                    handleSearchResultNavigation(result)
-                    // Clear the highlight request so it can be triggered again for the same item.
-                    appContext.searchResultToHighlight = nil
+                .onChange(of: activeChapter?.id) {
+                    // When chapter changes, force a full recalculation
+                    resetEditorSearch()
+                    lastProcessedTextContent = nil
+                    updateGlossaryAndHighlights()
                 }
-            }
-            .onChange(of: searchViewModel.searchQuery) {
-                updateEditorSearch()
-            }
-            .onChange(of: searchViewModel.currentResultIndex) {
-                reapplyAllHighlights()
-            }
-            .onChange(of: projectManager.settings.disableGlossaryHighlighting) { _, _ in
-                // Re-calculate and apply highlights when the setting is toggled to add/remove them instantly.
-                updateGlossaryAndHighlights()
-            }
-            .sheet(isPresented: $isGlossaryExtractionPresented) {
-                if let chapterID = activeChapter?.id {
-                    GlossaryExtractionView(
-                        project: project,
-                        projectManager: projectManager,
-                        currentChapterID: chapterID
-                    )
+                .onChange(of: activeEditorState?.sourceAttributedText) {
+                    // When text is typed, trigger the controlled update asynchronously.
+                    // This breaks the update cycle that causes jittering.
+                    DispatchQueue.main.async {
+                        updateGlossaryAndHighlights()
+                    }
                 }
+                .onChange(of: activeEditorState?.sourceSelection) { _, newSelection in
+                    handleGlossarySelection(newSelection)
+                }
+                .onChange(of: searchViewModel.searchQuery) {
+                    updateEditorSearch()
+                }
+                .onChange(of: searchViewModel.currentResultIndex) {
+                    reapplyAllHighlights()
+                }
+                .onChange(of: projectManager.settings.disableGlossaryHighlighting) { _, _ in
+                    // Re-calculate and apply highlights when the setting is toggled to add/remove them instantly.
+                    updateGlossaryAndHighlights()
+                }
+                .sheet(isPresented: $isGlossaryExtractionPresented) {
+                    if let chapterID = activeChapter?.id {
+                        GlossaryExtractionView(
+                            project: project,
+                            projectManager: projectManager,
+                            currentChapterID: chapterID
+                        )
+                    }
+                }
+            } else {
+                ContentUnavailableView(
+                    "No Chapter Selected",
+                    systemImage: "text.book.closed",
+                    description: Text("Select a chapter from the list in the sidebar.")
+                )
             }
-        } else {
-            ContentUnavailableView(
-                "No Chapter Selected",
-                systemImage: "text.book.closed",
-                description: Text("Select a chapter from the list in the sidebar.")
-            )
+        }
+        .onChange(of: appContext.searchResultToHighlight) { _, newResult in
+            if let result = newResult {
+                handleSearchResultNavigation(result)
+                // Clear the highlight request so it can be triggered again for the same item.
+                appContext.searchResultToHighlight = nil
+            }
         }
     }
     

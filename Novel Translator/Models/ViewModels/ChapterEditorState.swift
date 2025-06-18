@@ -50,22 +50,30 @@ class ChapterEditorState {
 
     /// Replaces a single occurrence of a search result.
     func replace(range: NSRange, with text: String, in editor: SearchResultItem.EditorType) {
-        let replacement = AttributedString(text)
         switch editor {
         case .source:
-            // Create a mutable copy
             var mutableText = self.sourceAttributedText
-            if let swiftRange = Range(range, in: mutableText) {
+            if let swiftRange = Range(range, in: mutableText), !swiftRange.isEmpty {
+                // Get attributes from the run at the location we are about to replace.
+                let run = mutableText.runs[swiftRange.lowerBound]
+                let attributes = run.attributes
+                var replacement = AttributedString(text)
+                replacement.setAttributes(attributes)
+
                 mutableText.replaceSubrange(swiftRange, with: replacement)
-                // Assign the new struct back to the property to force an update.
                 self.sourceAttributedText = mutableText
             }
         case .translated:
-            // Create a mutable copy
             var mutableText = self.translatedAttributedText
-            if let swiftRange = Range(range, in: mutableText) {
+            if let swiftRange = Range(range, in: mutableText), !swiftRange.isEmpty {
+                // Get attributes from the run at the location we are about to replace.
+                // *** THIS IS THE FIX ***
+                let run = mutableText.runs[swiftRange.lowerBound]
+                let attributes = run.attributes
+                var replacement = AttributedString(text)
+                replacement.setAttributes(attributes)
+
                 mutableText.replaceSubrange(swiftRange, with: replacement)
-                // Assign the new struct back to the property to force an update.
                 self.translatedAttributedText = mutableText
             }
         }
@@ -75,14 +83,19 @@ class ChapterEditorState {
     func replaceAll(results: [SearchResultItem], with text: String, in editor: SearchResultItem.EditorType) {
         // Sort results in descending order of location to avoid invalidating subsequent ranges.
         let sortedResults = results.sorted { $0.absoluteMatchRange.location > $1.absoluteMatchRange.location }
-        let replacement = AttributedString(text)
 
         switch editor {
         case .source:
             // Work on a mutable copy
             var mutableText = self.sourceAttributedText
             for result in sortedResults {
-                if let range = Range(result.absoluteMatchRange, in: mutableText) {
+                if let range = Range(result.absoluteMatchRange, in: mutableText), !range.isEmpty {
+                    // Create replacement with proper attributes for each occurrence.
+                    // *** THIS IS THE FIX ***
+                    let run = mutableText.runs[range.lowerBound]
+                    let attributes = run.attributes
+                    var replacement = AttributedString(text)
+                    replacement.setAttributes(attributes)
                     mutableText.replaceSubrange(range, with: replacement)
                 }
             }
@@ -93,7 +106,13 @@ class ChapterEditorState {
             // Work on a mutable copy
             var mutableText = self.translatedAttributedText
             for result in sortedResults {
-                if let range = Range(result.absoluteMatchRange, in: mutableText) {
+                if let range = Range(result.absoluteMatchRange, in: mutableText), !range.isEmpty {
+                    // Create replacement with proper attributes for each occurrence.
+                    // *** THIS IS THE FIX ***
+                    let run = mutableText.runs[range.lowerBound]
+                    let attributes = run.attributes
+                    var replacement = AttributedString(text)
+                    replacement.setAttributes(attributes)
                     mutableText.replaceSubrange(range, with: replacement)
                 }
             }

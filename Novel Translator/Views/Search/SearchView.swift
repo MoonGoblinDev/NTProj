@@ -1,10 +1,4 @@
-//
-//  SearchView.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 15/06/25.
-//
-
+// ...
 import SwiftUI
 
 struct SearchView: View {
@@ -27,6 +21,9 @@ struct SearchView: View {
     @State private var searchResults: [SearchResultGroup] = []
     @State private var isSearching: Bool = false
     
+    // Debouncing
+    @State private var searchDebounceTask: Task<Void, Never>? = nil
+    
     private let searchService = SearchService()
     
     var body: some View {
@@ -44,7 +41,7 @@ struct SearchView: View {
 
                     TextField("Search", text: $searchQuery)
                         .textFieldStyle(.plain)
-                        .onSubmit(performSearch)
+                        .onSubmit(performSearch) // Search immediately on Enter
                 }
                 
                 if isReplaceSectionExpanded {
@@ -120,10 +117,24 @@ struct SearchView: View {
                 .listStyle(.sidebar)
             }
         }
-        .onChange(of: searchQuery) { _, _ in performSearch() }
-        .onChange(of: matchCase) { _, _ in performSearch() }
-        .onChange(of: wholeWord) { _, _ in performSearch() }
-        .onChange(of: useRegex) { _, _ in performSearch() }
+        .onChange(of: searchQuery) { _, _ in debounceSearch() }
+        .onChange(of: matchCase) { _, _ in debounceSearch() }
+        .onChange(of: wholeWord) { _, _ in debounceSearch() }
+        .onChange(of: useRegex) { _, _ in debounceSearch() }
+    }
+    
+    private func debounceSearch() {
+        searchDebounceTask?.cancel()
+        searchDebounceTask = Task {
+            do {
+                try await Task.sleep(for: .milliseconds(300))
+                performSearch()
+            } catch is CancellationError {
+                // Task was cancelled, which is expected.
+            } catch {
+                print("Search debounce task failed: \(error)")
+            }
+        }
     }
     
     private func performSearch() {
@@ -151,11 +162,12 @@ struct SearchView: View {
     
     private func replace(result: SearchResultItem) {
         do {
+            // 1. Perform the replacement in the editor state
             try workspaceViewModel.replace(searchResult: result, with: replaceQuery)
-            // After replacing, the search results are stale. Refresh them asynchronously.
-            DispatchQueue.main.async {
-                performSearch()
-            }
+            // 2. Commit the changes from editor state back to the project model
+            try workspaceViewModel.updateChapterFromState(id: result.chapterID)
+            // 3. Refresh search results, which now read from the updated model
+            performSearch()
         } catch {
             // TODO: Show an alert for the error
             print("Failed to replace item: \(error)")
@@ -163,31 +175,30 @@ struct SearchView: View {
     }
 
     private func replaceAll() {
-        // Group all results by chapter, then by editor type
         let allChapterResults = searchResults.flatMap { $0.results }
         let groupedByChapter = Dictionary(grouping: allChapterResults) { $0.chapterID }
 
-        for (chapterID, resultsInChapter) in groupedByChapter {
-            let groupedByEditor = Dictionary(grouping: resultsInChapter) { $0.editorType }
-            
-            for (editorType, editorResults) in groupedByEditor {
-                do {
+        do {
+            for (chapterID, resultsInChapter) in groupedByChapter {
+                let groupedByEditor = Dictionary(grouping: resultsInChapter) { $0.editorType }
+                
+                for (editorType, editorResults) in groupedByEditor {
                     try workspaceViewModel.replaceAll(
                         in: chapterID,
                         editorType: editorType,
                         with: replaceQuery,
                         from: editorResults
                     )
-                } catch {
-                    // TODO: Show an alert for the error
-                    print("Failed to replace all in chapter \(chapterID): \(error)")
                 }
+                // After all replacements in a chapter's state are done, commit to the model.
+                try workspaceViewModel.updateChapterFromState(id: chapterID)
             }
-        }
-        
-        // After all replacements, refresh the search to update the UI.
-        DispatchQueue.main.async {
+            
+            // After all chapters are updated, refresh the search to update the UI.
             performSearch()
+        } catch {
+            // TODO: Show an alert for the error
+            print("Failed to replace all: \(error)")
         }
     }
     
