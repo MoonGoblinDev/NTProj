@@ -103,7 +103,8 @@ struct SearchView: View {
                                     
                                     if isReplaceSectionExpanded {
                                         Spacer()
-                                        Button("Replace") {
+                                        Button("􀅌") {
+                                            
                                             replace(result: result)
                                         }
                                         .buttonStyle(.bordered)
@@ -233,4 +234,13 @@ fileprivate struct SearchOptionButton: View {
         .buttonStyle(.plain)
         .help(help)
     }
+}
+
+
+#Preview {
+    let mocks = PreviewMocks.shared
+    return SearchView(project: mocks.project)
+        .environmentObject(mocks.workspaceViewModel)
+        .environmentObject(mocks.appContext)
+        .frame(width: 380, height: 700)
 }

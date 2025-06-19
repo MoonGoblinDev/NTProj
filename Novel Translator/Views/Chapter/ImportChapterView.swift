@@ -80,3 +80,9 @@ struct ImportChapterView: View {
     }
 }
 
+
+#Preview {
+    let mocks = PreviewMocks.shared
+    return ImportChapterView(project: mocks.project)
+        .environmentObject(mocks.projectManager)
+}

@@ -269,3 +269,25 @@ private struct GlossaryPopupHandler: View {
         entryToDisplay = proj.glossaryEntries.first(where: { $0.id == newID })
     }
 }
+
+
+#Preview("Workspace - Chapter Open") {
+    let mocks = PreviewMocks.shared
+    // The mock workspace already has an active chapter
+    return mocks.provide(to: TranslationWorkspaceView(project: mocks.project))
+}
+
+#Preview("Workspace - No Chapter Open") {
+    let mocks = PreviewMocks.shared
+    // Close all chapters to show the placeholder view
+    mocks.workspaceViewModel.closeAllChapters()
+    return mocks.provide(to: TranslationWorkspaceView(project: mocks.project))
+}
+
+#Preview("Workspace - Unsaved Changes Alert") {
+    let mocks = PreviewMocks.shared
+    // Simulate the state that shows the alert by setting the relevant properties on the view model
+    mocks.workspaceViewModel.chapterIDToClose = mocks.chapter3.id
+    mocks.workspaceViewModel.isCloseChapterAlertPresented = true
+    return mocks.provide(to: TranslationWorkspaceView(project: mocks.project))
+}
