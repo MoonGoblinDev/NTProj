@@ -155,3 +155,8 @@ fileprivate struct PromptPresetDetailView: View {
         .onChange(of: preset.exampleTranslatedText) { _, _ in preset.lastModifiedDate = Date() }
     }
 }
+
+#Preview {
+    let mocks = PreviewMocks.shared
+    return PromptPresetsView(projectManager: mocks.projectManager)
+}

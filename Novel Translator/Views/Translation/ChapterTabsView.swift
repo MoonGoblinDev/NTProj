@@ -99,3 +99,12 @@ fileprivate struct ChapterTabItem: View {
         .onTapGesture(perform: onClose)
     }
 }
+
+#Preview {
+    let mocks = PreviewMocks.shared
+    return ChapterTabsView(
+        workspaceViewModel: mocks.workspaceViewModel,
+        project: mocks.project
+    )
+    .frame(width: 500)
+}

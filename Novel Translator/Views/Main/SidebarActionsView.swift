@@ -46,3 +46,34 @@ struct SidebarActionsView: View {
         }
     }
 }
+
+#Preview {
+    // This helper view allows testing the binding
+    struct PreviewWrapper: View {
+        @State private var selectedTab: SidebarTab = .chapters
+        private let mocks = PreviewMocks.shared
+
+        var body: some View {
+            VStack {
+                // The view being tested
+                SidebarActionsView(
+                    selectedTab: $selectedTab,
+                    project: mocks.project
+                )
+                .environmentObject(mocks.projectManager)
+
+                Divider()
+                Text("Change Tab to See Button Change")
+                Picker("Tab", selection: $selectedTab) {
+                    ForEach(SidebarTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding()
+            }
+        }
+    }
+    return PreviewWrapper()
+        .frame(width: 500)
+}

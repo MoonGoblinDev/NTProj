@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ChapterListView: View {
-    @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel 
+    @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel
     @ObservedObject var project: TranslationProject
     
     @State private var isImporterPresented = false
@@ -78,4 +78,19 @@ struct ChapterListView: View {
             project.chapters.removeAll { $0.id == id }
         }
     }
+}
+
+#Preview("Chapter List") {
+    let mocks = PreviewMocks.shared
+    return ChapterListView(project: mocks.project)
+        .environmentObject(mocks.workspaceViewModel)
+        .frame(width: 350, height: 400)
+}
+
+#Preview("Empty Chapter List") {
+    let mocks = PreviewMocks.shared
+    let emptyProject = TranslationProject(name: "Empty", sourceLanguage: "A", targetLanguage: "B")
+    return ChapterListView(project: emptyProject)
+        .environmentObject(mocks.workspaceViewModel)
+        .frame(width: 350, height: 400)
 }

@@ -230,4 +230,12 @@ class ProjectManager: ObservableObject {
         
         saveSettings()
     }
+
+    // MARK: - Preview & Testing Helpers
+
+    /// Sets the current project directly. **For use in SwiftUI Previews or unit tests only.**
+    func setCurrentProjectForPreview(_ project: TranslationProject?, url: URL? = nil) {
+        self.currentProject = project
+        self.currentProjectURL = url
+    }
 }

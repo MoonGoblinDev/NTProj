@@ -86,3 +86,12 @@ struct TranslationWorkspaceToolbar: ToolbarContent {
         }
     }
 }
+
+#Preview("Editor Area") {
+    let mocks = PreviewMocks.shared
+    return mocks.provide(to: EditorAreaView(
+        project: mocks.project,
+        translationViewModel: mocks.translationViewModel,
+        onShowPromptPreview: {}
+    ))
+}

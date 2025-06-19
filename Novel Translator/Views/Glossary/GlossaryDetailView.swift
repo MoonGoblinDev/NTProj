@@ -124,3 +124,42 @@ struct GlossaryDetailView: View {
         dismiss()
     }
 }
+
+#Preview("Editing Entry") {
+    // This helper view manages the state for the preview
+    struct PreviewWrapper: View {
+        @State private var entry: GlossaryEntry
+        private var mocks = PreviewMocks.shared
+        
+        init() {
+            _entry = State(initialValue: mocks.glossaryEntry1)
+        }
+        
+        var body: some View {
+            GlossaryDetailView(
+                entry: $entry,
+                project: mocks.project,
+                isCreating: false
+            )
+            .environmentObject(mocks.projectManager)
+        }
+    }
+    return PreviewWrapper()
+}
+
+#Preview("Creating New Entry") {
+    struct PreviewWrapper: View {
+        @State private var newEntry = GlossaryEntry(originalTerm: "", translation: "", category: .character, contextDescription: "")
+        private var mocks = PreviewMocks.shared
+        
+        var body: some View {
+            GlossaryDetailView(
+                entry: $newEntry,
+                project: mocks.project,
+                isCreating: true
+            )
+            .environmentObject(mocks.projectManager)
+        }
+    }
+    return PreviewWrapper()
+}

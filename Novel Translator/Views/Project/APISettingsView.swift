@@ -224,3 +224,8 @@ fileprivate struct DeepseekSettingsView: View {
         )
     }
 }
+
+#Preview {
+    let mocks = PreviewMocks.shared
+    return APISettingsView(projectManager: mocks.projectManager)
+}

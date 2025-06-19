@@ -30,3 +30,9 @@ struct ProjectStatsView: View {
         .navigationTitle("")
     }
 }
+
+#Preview {
+    let mocks = PreviewMocks.shared
+    return ProjectStatsView(project: mocks.project)
+        .frame(width: 400, height: 400)
+}

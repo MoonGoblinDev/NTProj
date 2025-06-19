@@ -15,6 +15,10 @@ struct GlossaryExtractionView: View {
         ))
     }
     
+    init(viewModel: GlossaryExtractionViewModel) {
+        _viewModel = State(initialValue: viewModel)
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -367,4 +371,40 @@ fileprivate struct CategoryTagView: View {
         .padding(.vertical, 5)
         .background(category.highlightColor.opacity(0.25), in: Capsule())
     }
+}
+
+#Preview("Options State") {
+    let mocks = PreviewMocks.shared
+    return GlossaryExtractionView(
+        project: mocks.project,
+        projectManager: mocks.projectManager,
+        currentChapterID: mocks.chapter1.id
+    )
+}
+
+#Preview("Results State") {
+    let mocks = PreviewMocks.shared
+    let vm = GlossaryExtractionViewModel(
+        project: mocks.project,
+        projectManager: mocks.projectManager,
+        currentChapterID: mocks.chapter1.id
+    )
+    vm.viewState = .results
+    vm.selectableEntries = [
+        .init(entry: .init(originalTerm: "Lady of the Lake", translation: "湖の乙女", category: .character, contextDescription: "Gave Arthur the sword.")),
+        .init(entry: .init(originalTerm: "Gold", translation: "金", category: .object, contextDescription: "The dragon sleeps on it."))
+    ]
+    return GlossaryExtractionView(viewModel: vm)
+}
+
+#Preview("Error State") {
+    let mocks = PreviewMocks.shared
+    let vm = GlossaryExtractionViewModel(
+        project: mocks.project,
+        projectManager: mocks.projectManager,
+        currentChapterID: mocks.chapter1.id
+    )
+    vm.viewState = .error
+    vm.errorMessage = "The API returned an error (Status Code: 401): Invalid API Key."
+    return GlossaryExtractionView(viewModel: vm)
 }

@@ -104,3 +104,21 @@ struct TokenCounterView: View {
         }
     }
 }
+
+#Preview {
+    let mocks = PreviewMocks.shared
+    return VStack(spacing: 20) {
+        TokenCounterView(
+            text: "This is some sample text for the token counter.",
+            projectManager: mocks.projectManager,
+            autoCount: true
+        )
+        TokenCounterView(
+            text: "これはトークンカウンターのサンプルテキストです。",
+            projectManager: mocks.projectManager,
+            autoCount: false
+        )
+    }
+    .padding()
+    .frame(width: 300)
+}

@@ -79,3 +79,4 @@ struct ImportChapterView: View {
         .frame(minWidth: 450, idealWidth: 500, minHeight: 350)
     }
 }
+

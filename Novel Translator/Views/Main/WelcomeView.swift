@@ -52,3 +52,18 @@ struct WelcomeView: View {
         }
     }
 }
+
+#Preview("With Recent Projects") {
+    let mocks = PreviewMocks.shared
+    return WelcomeView()
+        .environmentObject(mocks.projectManager)
+}
+
+#Preview("First Launch") {
+    // Create a special ProjectManager with no recent projects
+    let firstLaunchManager = ProjectManager()
+    firstLaunchManager.settings.projects = []
+    
+    return WelcomeView()
+        .environmentObject(firstLaunchManager)
+}

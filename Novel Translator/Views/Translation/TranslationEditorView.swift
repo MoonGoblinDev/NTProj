@@ -1,5 +1,3 @@
-// FILE: Novel Translator/Views/Translation/TranslationEditorView.swift
-
 import SwiftUI
 import STTextViewSwiftUI
 import STTextView
@@ -71,4 +69,13 @@ struct TranslationEditorView: View {
         }
         .navigationTitle("") // This can be removed as it's not in a NavigationView here
     }
+}
+
+#Preview("Editor Area") {
+    let mocks = PreviewMocks.shared
+    return mocks.provide(to: EditorAreaView(
+        project: mocks.project,
+        translationViewModel: mocks.translationViewModel,
+        onShowPromptPreview: {}
+    ))
 }

@@ -59,3 +59,9 @@ struct CreateProjectView: View {
         .navigationTitle("New Translation Project")
     }
 }
+
+#Preview {
+    let mocks = PreviewMocks.shared
+    return CreateProjectView()
+        .environmentObject(mocks.projectManager)
+}

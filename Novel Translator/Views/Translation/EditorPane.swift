@@ -1,13 +1,3 @@
-//
-//  EditorPane.swift
-//  Novel Translator
-//
-//  Created by Bregas Satria Wicaksono on 17/06/25.
-//
-
-// Create this new file or add it at the bottom of TranslationEditorView.swift
-// FILE: Novel Translator/Views/Translation/EditorPane.swift (or similar)
-
 import SwiftUI
 import STTextViewSwiftUI
 import STTextView
@@ -46,4 +36,13 @@ struct EditorPane: View {
             .disabled(isDisabled)
         }
     }
+}
+
+#Preview("Editor Area") {
+    let mocks = PreviewMocks.shared
+    return mocks.provide(to: EditorAreaView(
+        project: mocks.project,
+        translationViewModel: mocks.translationViewModel,
+        onShowPromptPreview: {}
+    ))
 }

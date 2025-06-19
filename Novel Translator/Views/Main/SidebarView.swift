@@ -24,7 +24,7 @@ struct SidebarView: View {
                     ChapterListView(project: project)
                 case .glossary:
                     GlossaryView(project: project)
-                case .search: 
+                case .search:
                     SearchView(project: project)
                 case .settings:
                     ProjectSettingsView(project: project)

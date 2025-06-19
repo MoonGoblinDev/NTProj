@@ -60,3 +60,23 @@ struct ProjectSelectorView: View {
         .frame(width: 120)
     }
 }
+
+#Preview("Project Open") {
+    let mocks = PreviewMocks.shared
+    return ProjectSelectorView()
+        .environmentObject(mocks.projectManager)
+        .padding()
+}
+
+#Preview("No Project Open") {
+    let manager = ProjectManager()
+    // The default state is no project open, so we don't need to set it to nil.
+    // Let's add mock recent projects to make the preview useful.
+    manager.settings.projects = [
+        PreviewMocks.shared.projectManager.settings.projects.first!,
+        PreviewMocks.shared.projectManager.settings.projects.last!
+    ]
+    return ProjectSelectorView()
+        .environmentObject(manager)
+        .padding()
+}

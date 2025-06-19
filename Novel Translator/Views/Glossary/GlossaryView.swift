@@ -67,3 +67,18 @@ struct GlossaryView: View {
         projectManager.saveProject()
     }
 }
+
+#Preview("Glossary with Entries") {
+    let mocks = PreviewMocks.shared
+    return GlossaryView(project: mocks.project)
+        .environmentObject(mocks.projectManager)
+        .frame(width: 350, height: 400)
+}
+
+#Preview("Empty Glossary") {
+    let mocks = PreviewMocks.shared
+    let emptyProject = TranslationProject(name: "Empty", sourceLanguage: "A", targetLanguage: "B")
+    return GlossaryView(project: emptyProject)
+        .environmentObject(mocks.projectManager)
+        .frame(width: 350, height: 400)
+}

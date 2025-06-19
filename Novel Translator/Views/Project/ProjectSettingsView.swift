@@ -62,3 +62,10 @@ struct ProjectSettingsView: View {
         }
     }
 }
+
+#Preview {
+    let mocks = PreviewMocks.shared
+    return ProjectSettingsView(project: mocks.project)
+        .environmentObject(mocks.projectManager)
+        .frame(width: 400, height: 600)
+}
