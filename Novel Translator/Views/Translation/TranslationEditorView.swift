@@ -66,6 +66,11 @@ struct TranslationEditorView: View {
                 translatedSelection: $translatedSelection,
                 isDisabled: isDisabled
             )
+            Rectangle()
+                .fill(.background)
+                .frame(height: 45)
+                
+                
         }
         .navigationTitle("") // This can be removed as it's not in a NavigationView here
     }

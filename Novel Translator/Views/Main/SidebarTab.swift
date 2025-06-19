@@ -9,11 +9,11 @@ import Foundation
 
 // This enum is now public (internal by default) and can be shared by multiple views.
 enum SidebarTab: String, CaseIterable {
-    case chapters = "Chapters"
-    case glossary = "Glossary"
-    case search = "Search"
-    case settings = "Settings"
-    case stats = "Statistics"
+    case chapters = "􀤞"
+    case glossary = "􀅶"
+    case search = "􀊫"
+    case settings = "􀣋"
+    case stats = "􁂥"
     
     var icon: String {
         switch self {
