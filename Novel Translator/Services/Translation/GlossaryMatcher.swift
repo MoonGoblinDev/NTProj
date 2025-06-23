@@ -33,4 +33,29 @@ class GlossaryMatcher {
         // Return all found matches, sorted by their position in the text.
         return matches.sorted { $0.range.lowerBound < $1.range.lowerBound }
     }
+    
+    func detectTranslations(in text: String, from glossary: [GlossaryEntry]) -> [GlossaryMatch] {
+        var matches: [GlossaryMatch] = []
+        
+        for entry in glossary where entry.isActive && !entry.translation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let termToSearch = entry.translation
+            
+            var searchStartIndex = text.startIndex
+            
+            // Find all occurrences of the term in the text.
+            while searchStartIndex < text.endIndex,
+                  let range = text.range(of: termToSearch, options: .caseInsensitive, range: searchStartIndex..<text.endIndex) {
+                let match = GlossaryMatch(
+                    entry: entry,
+                    range: range,
+                    matchedAlias: nil // No aliases for translations
+                )
+                matches.append(match)
+                searchStartIndex = range.upperBound
+            }
+        }
+        
+        // Return all found matches, sorted by their position in the text.
+        return matches.sorted { $0.range.lowerBound < $1.range.lowerBound }
+    }
 }

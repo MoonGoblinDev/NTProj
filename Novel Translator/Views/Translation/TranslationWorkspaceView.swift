@@ -18,9 +18,6 @@ struct TranslationWorkspaceView: View {
     @State private var promptPreviewText = ""
     @State private var isGeneratingPromptPreview = false
     
-    // State passed to handlers
-    @State private var entryToDisplay: GlossaryEntry?
-    
     // Computed binding for error alert
     private var isErrorAlertPresented: Binding<Bool> {
         Binding<Bool>(
@@ -40,11 +37,6 @@ struct TranslationWorkspaceView: View {
                             onShowPromptPreview: generatePromptPreview
                         )
                         .environmentObject(appContext)
-                        // MODIFIED: The .background modifier is now simplified.
-                        .background {
-                            // The problematic handler is removed.
-                            GlossaryPopupHandler(entryToDisplay: $entryToDisplay)
-                        }
                     } else {
                         initialPlaceholderView
                     }
@@ -75,7 +67,7 @@ struct TranslationWorkspaceView: View {
             .sheet(isPresented: $isPromptPreviewPresented) {
                 promptPreviewSheet
             }
-            .sheet(isPresented: $appContext.isSheetPresented, onDismiss: { appContext.glossaryEntryToEditID = nil }) {
+            .sheet(isPresented: $appContext.isGlossaryDetailSheetPresented, onDismiss: { appContext.glossaryEntryIDForDetail = nil }) {
                 glossaryDetailSheet
             }
             .alert("Translation Error", isPresented: isErrorAlertPresented, actions: {
@@ -227,7 +219,7 @@ struct TranslationWorkspaceView: View {
     
     private var glossaryDetailSheet: some View {
         Group {
-            if let entry = entryToDisplay, let index = project.glossaryEntries.firstIndex(where: { $0.id == entry.id }) {
+            if let entryID = appContext.glossaryEntryIDForDetail, let index = project.glossaryEntries.firstIndex(where: { $0.id == entryID }) {
                 NavigationStack {
                     GlossaryDetailView(entry: $project.glossaryEntries[index], project: project, isCreating: false)
                         .environmentObject(projectManager)
@@ -245,31 +237,7 @@ struct TranslationWorkspaceView: View {
     }
 }
 
-// MARK: - Private Logic Handler Views
-
-/// Handles displaying the glossary detail sheet when an item is selected globally.
-private struct GlossaryPopupHandler: View {
-    @EnvironmentObject private var appContext: AppContext
-    @EnvironmentObject private var workspaceViewModel: WorkspaceViewModel
-    
-    @Binding var entryToDisplay: GlossaryEntry?
-    private var project: TranslationProject? { workspaceViewModel.project }
-
-    var body: some View {
-        EmptyView()
-            .onChange(of: appContext.glossaryEntryToEditID) { _, newID in
-                handleGlossaryIDChange(newID)
-            }
-    }
-    
-    private func handleGlossaryIDChange(_ newID: UUID?) {
-        guard let proj = project, let newID = newID else {
-            entryToDisplay = nil; return
-        }
-        entryToDisplay = proj.glossaryEntries.first(where: { $0.id == newID })
-    }
-}
-
+// MARK: - Private Logic Handler Views (REMOVED)
 
 #Preview("Workspace - Chapter Open") {
     let mocks = PreviewMocks.shared

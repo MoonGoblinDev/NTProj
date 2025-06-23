@@ -11,21 +11,21 @@ import SwiftUI
 @MainActor
 class AppContext: ObservableObject {
     
-
-    @Published var glossaryEntryToEditID: UUID? {
+    /// This property is used to signal which glossary entry's detail view should be shown.
+    /// Setting it will trigger the sheet presentation logic.
+    @Published var glossaryEntryIDForDetail: UUID? {
         didSet {
-            if oldValue != nil && glossaryEntryToEditID != nil {
-                isSheetPresented = false
+            if oldValue != nil && glossaryEntryIDForDetail != nil {
+                isGlossaryDetailSheetPresented = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                    self.isSheetPresented = true
+                    self.isGlossaryDetailSheetPresented = true
                 }
             } else {
-                isSheetPresented = glossaryEntryToEditID != nil
+                isGlossaryDetailSheetPresented = glossaryEntryIDForDetail != nil
             }
         }
     }
     
-
-    @Published var isSheetPresented: Bool = false
+    @Published var isGlossaryDetailSheetPresented: Bool = false
     @Published var searchResultToHighlight: SearchResultItem?
 }

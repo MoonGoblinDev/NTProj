@@ -26,7 +26,7 @@ struct ContentView: View {
             }
             
             if let uuid = UUID(uuidString: url.lastPathComponent) {
-                appContext.glossaryEntryToEditID = uuid
+                appContext.glossaryEntryIDForDetail = uuid
             }
         }
     }

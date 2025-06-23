@@ -8,7 +8,9 @@ struct EditorAreaView: View {
     
     // Local state for highlight management
     @State private var glossaryMatches: [GlossaryMatch] = []
+    @State private var translatedGlossaryMatches: [GlossaryMatch] = []
     @State private var lastProcessedTextContent: String?
+    @State private var lastProcessedTranslatedTextContent: String?
     private let glossaryMatcher = GlossaryMatcher()
     
     // Parent Models & State
@@ -23,6 +25,14 @@ struct EditorAreaView: View {
     @State private var isEditorSearchActive = false
     @State private var isConfigPopoverShown = false
     @State private var isGlossaryExtractionPresented = false
+    
+    // New state for the popover-like view
+    struct GlossaryInfo: Identifiable {
+        let id = UUID() // For transition identity
+        let entry: GlossaryEntry
+        let isSourceTerm: Bool
+    }
+    @State private var activeGlossaryInfo: GlossaryInfo?
     
     // Computed Properties
     private var activeChapter: Chapter? {
@@ -46,32 +56,59 @@ struct EditorAreaView: View {
     
     var body: some View {
         if let chapter = activeChapter, let editorState = activeEditorState {
-            ZStack(alignment: .top) {
+            ZStack(alignment: .bottom) {
                 VStack(spacing: 0) {
                     ChapterTabsView(workspaceViewModel: workspaceViewModel, project: project)
                     
                     editorWithButtons(chapter: chapter, editorState: editorState)
                 }
+                
+                // The new glossary info popup view
+                if let info = activeGlossaryInfo {
+                    GlossaryPopupView(
+                        info: info,
+                        onOpenDetail: {
+                            appContext.glossaryEntryIDForDetail = info.entry.id
+                            withAnimation { activeGlossaryInfo = nil }
+                        },
+                        onDismiss: {
+                            withAnimation { activeGlossaryInfo = nil }
+                        }
+                    )
+                    .padding()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             .onAppear {
                 // Initial load when the view appears for the first time
-                updateGlossaryAndHighlights()
+                updateSourceGlossaryAndHighlights()
+                updateTranslatedGlossaryAndHighlights()
             }
             .onChange(of: activeChapter?.id) {
                 // When chapter changes, force a full recalculation
                 resetEditorSearch()
                 lastProcessedTextContent = nil
-                updateGlossaryAndHighlights()
+                lastProcessedTranslatedTextContent = nil
+                updateSourceGlossaryAndHighlights()
+                updateTranslatedGlossaryAndHighlights()
             }
             .onChange(of: activeEditorState?.sourceAttributedText) {
                 // When text is typed, trigger the controlled update asynchronously.
                 // This breaks the update cycle that causes jittering.
                 DispatchQueue.main.async {
-                    updateGlossaryAndHighlights()
+                    updateSourceGlossaryAndHighlights()
+                }
+            }
+            .onChange(of: activeEditorState?.translatedAttributedText) {
+                DispatchQueue.main.async {
+                    updateTranslatedGlossaryAndHighlights()
                 }
             }
             .onChange(of: activeEditorState?.sourceSelection) { _, newSelection in
-                handleGlossarySelection(newSelection)
+                handleSourceGlossarySelection(newSelection)
+            }
+            .onChange(of: activeEditorState?.translatedSelection) { _, newSelection in
+                handleTranslatedGlossarySelection(newSelection)
             }
             .onChange(of: appContext.searchResultToHighlight) { _, newResult in
                 if let result = newResult {
@@ -84,11 +121,12 @@ struct EditorAreaView: View {
                 updateEditorSearch()
             }
             .onChange(of: searchViewModel.currentResultIndex) {
-                reapplyAllHighlights()
+                reapplySourceHighlights()
             }
             .onChange(of: projectManager.settings.disableGlossaryHighlighting) { _, _ in
                 // Re-calculate and apply highlights when the setting is toggled to add/remove them instantly.
-                updateGlossaryAndHighlights()
+                updateSourceGlossaryAndHighlights()
+                updateTranslatedGlossaryAndHighlights()
             }
             .sheet(isPresented: $isGlossaryExtractionPresented) {
                 if let chapterID = activeChapter?.id {
@@ -208,7 +246,6 @@ struct EditorAreaView: View {
     private func translateButton(chapter: Chapter) -> some View {
         Button("Translate", systemImage: "sparkles") {
             Task {
-                // MODIFIED: Pass the workspaceViewModel to the updated function.
                 await translationViewModel.streamTranslateChapter(project: project, chapter: chapter, settings: projectManager.settings, workspace: workspaceViewModel)
             }
         }
@@ -238,9 +275,7 @@ struct EditorAreaView: View {
         }
     }
     
-    /// The main driver for glossary matching and highlighting. This function is designed
-    /// to be called only when the text content actually changes, preventing update loops.
-    private func updateGlossaryAndHighlights() {
+    private func updateSourceGlossaryAndHighlights() {
         guard let state = activeEditorState else {
             self.glossaryMatches = []
             self.lastProcessedTextContent = nil
@@ -253,23 +288,40 @@ struct EditorAreaView: View {
             return
         }
         
-        // 1. Conditionally run the expensive glossary detection logic.
         if projectManager.settings.disableGlossaryHighlighting {
-            // If disabled, ensure the matches array is empty.
             self.glossaryMatches = []
         } else {
-            // If enabled, perform the detection.
             self.glossaryMatches = text.isEmpty ? [] : glossaryMatcher.detectTerms(in: text, from: project.glossaryEntries)
         }
         
-        // 2. Store the content we just processed to use in the next check.
         self.lastProcessedTextContent = text
-        
-        // 3. Now that matches are updated (or cleared), re-apply all visual highlights.
-        reapplyAllHighlights()
+        reapplySourceHighlights()
     }
 
-    private func reapplyAllHighlights() {
+    private func updateTranslatedGlossaryAndHighlights() {
+        guard let state = activeEditorState else {
+            self.translatedGlossaryMatches = []
+            self.lastProcessedTranslatedTextContent = nil
+            return
+        }
+
+        let text = String(state.translatedAttributedText.characters)
+
+        if text == lastProcessedTranslatedTextContent {
+            return
+        }
+
+        if projectManager.settings.disableGlossaryHighlighting {
+            self.translatedGlossaryMatches = []
+        } else {
+            self.translatedGlossaryMatches = text.isEmpty ? [] : glossaryMatcher.detectTranslations(in: text, from: project.glossaryEntries)
+        }
+        
+        self.lastProcessedTranslatedTextContent = text
+        reapplyTranslatedHighlights()
+    }
+
+    private func reapplySourceHighlights() {
         guard let state = activeEditorState else { return }
         
         var attributedString = state.sourceAttributedText
@@ -281,7 +333,7 @@ struct EditorAreaView: View {
         attributedString[fullRange].backgroundColor = nil
 
         // 2. Apply glossary highlights (conditionally)
-        
+        if !projectManager.settings.disableGlossaryHighlighting {
             for match in glossaryMatches {
                 if let range = Range(match.range, in: attributedString) {
                     var container = AttributeContainer()
@@ -290,7 +342,7 @@ struct EditorAreaView: View {
                     attributedString[range].mergeAttributes(container, mergePolicy: .keepNew)
                 }
             }
-        
+        }
         
         // 3. Apply search highlights over glossary highlights
         for range in searchViewModel.searchResults {
@@ -308,17 +360,42 @@ struct EditorAreaView: View {
         state.sourceAttributedText = attributedString
     }
     
+    private func reapplyTranslatedHighlights() {
+        guard let state = activeEditorState else { return }
+        
+        var attributedString = state.translatedAttributedText
+        let fullRange = attributedString.startIndex..<attributedString.endIndex
+        
+        // Clear all cosmetic attributes
+        attributedString[fullRange].foregroundColor = NSColor.textColor
+        attributedString[fullRange].underlineStyle = nil
+        attributedString[fullRange].backgroundColor = nil
+
+        // Apply glossary highlights
+        if !projectManager.settings.disableGlossaryHighlighting {
+            for match in translatedGlossaryMatches {
+                if let range = Range(match.range, in: attributedString) {
+                    var container = AttributeContainer()
+                    container.underlineStyle = .single
+                    container.foregroundColor = NSColor(match.entry.category.highlightColor)
+                    attributedString[range].mergeAttributes(container, mergePolicy: .keepNew)
+                }
+            }
+        }
+        state.translatedAttributedText = attributedString
+    }
+    
     private func resetEditorSearch() {
         searchViewModel.searchQuery = ""
         isEditorSearchActive = false
-        // The onChange on searchQuery will trigger updateEditorSearch() -> reapplyAllHighlights()
+        // The onChange on searchQuery will trigger updateEditorSearch() -> reapplySourceHighlights()
     }
 
     private func updateEditorSearch() {
         guard let state = activeEditorState else { return }
         // Use the explicit String initializer to get the content reliably.
         searchViewModel.updateSearch(in: String(state.sourceAttributedText.characters))
-        reapplyAllHighlights()
+        reapplySourceHighlights()
         navigateToCurrentMatch()
     }
     
@@ -339,18 +416,49 @@ struct EditorAreaView: View {
         state.sourceSelection = range
     }
     
-    private func handleGlossarySelection(_ selection: NSRange?) {
-        // Prevent selection logic from running if highlighting is off.
+    private func handleSourceGlossarySelection(_ selection: NSRange?) {
         if projectManager.settings.disableGlossaryHighlighting { return }
         
         guard let state = activeEditorState,
               let selection = selection,
               selection.length == 0,
-              !glossaryMatches.isEmpty else { return }
+              !glossaryMatches.isEmpty else {
+            if activeGlossaryInfo != nil { withAnimation { activeGlossaryInfo = nil } }
+            return
+        }
         
         let text = String(state.sourceAttributedText.characters)
         if let match = glossaryMatches.first(where: { NSLocationInRange(selection.location, $0.range.toNSRange(in: text)) }) {
-            appContext.glossaryEntryToEditID = match.entry.id
+            withAnimation(.easeInOut) {
+                activeGlossaryInfo = GlossaryInfo(entry: match.entry, isSourceTerm: true)
+            }
+        } else {
+            if activeGlossaryInfo?.isSourceTerm == true {
+                withAnimation { activeGlossaryInfo = nil }
+            }
+        }
+    }
+
+    private func handleTranslatedGlossarySelection(_ selection: NSRange?) {
+        if projectManager.settings.disableGlossaryHighlighting { return }
+        
+        guard let state = activeEditorState,
+              let selection = selection,
+              selection.length == 0,
+              !translatedGlossaryMatches.isEmpty else {
+            if activeGlossaryInfo != nil { withAnimation { activeGlossaryInfo = nil } }
+            return
+        }
+        
+        let text = String(state.translatedAttributedText.characters)
+        if let match = translatedGlossaryMatches.first(where: { NSLocationInRange(selection.location, $0.range.toNSRange(in: text)) }) {
+            withAnimation(.easeInOut) {
+                activeGlossaryInfo = GlossaryInfo(entry: match.entry, isSourceTerm: false)
+            }
+        } else {
+            if activeGlossaryInfo?.isSourceTerm == false {
+                withAnimation { activeGlossaryInfo = nil }
+            }
         }
     }
 }
