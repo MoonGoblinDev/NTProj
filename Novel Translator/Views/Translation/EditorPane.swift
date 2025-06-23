@@ -1,16 +1,32 @@
+//
+//  EditorPane.swift
+//  Novel Translator
+//
+//  Created by Bregas Satria Wicaksono on 17/06/25.
+//
+
+
 import SwiftUI
 import STTextViewSwiftUI
 import STTextView
 
 /// A highly isolated view containing only the HSplitView and the two STTextView editors.
 /// This prevents re-renders from parent "chrome" (like token counters) from affecting the editors.
+/// It uses local @State for selection to prevent scroll jitter, while syncing with the parent ViewModel.
 struct EditorPane: View {
+    // Bindings for the text content
     @Binding var sourceText: AttributedString
     @Binding var translatedText: AttributedString
-    @Binding var sourceSelection: NSRange?
-    @Binding var translatedSelection: NSRange?
+    
+    // Bindings for selection from the parent view model
+    @Binding var sourceSelectionFromViewModel: NSRange?
+    @Binding var translatedSelectionFromViewModel: NSRange?
     
     let isDisabled: Bool
+    
+    // Local state to drive the TextViews and prevent feedback loops
+    @State private var localSourceSelection: NSRange?
+    @State private var localTranslatedSelection: NSRange?
     
     private let textViewOptions: TextView.Options = [
         .showLineNumbers,
@@ -22,27 +38,47 @@ struct EditorPane: View {
         HSplitView {
             TextView(
                 text: $sourceText,
-                selection: $sourceSelection,
+                selection: $localSourceSelection, // Driven by local @State
                 options: textViewOptions
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             TextView(
                 text: $translatedText,
-                selection: $translatedSelection,
+                selection: $localTranslatedSelection, // Driven by local @State
                 options: textViewOptions
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .disabled(isDisabled)
         }
+        // This block ensures the local state and the view model state are always in sync.
+        .onAppear {
+            localSourceSelection = sourceSelectionFromViewModel
+            localTranslatedSelection = translatedSelectionFromViewModel
+        }
+        .onChange(of: localSourceSelection) { _, newSelection in
+            // Update the view model when the user changes selection in the editor
+            if sourceSelectionFromViewModel != newSelection {
+                sourceSelectionFromViewModel = newSelection
+            }
+        }
+        .onChange(of: sourceSelectionFromViewModel) { _, newSelection in
+            // Update the editor when the view model's selection changes from elsewhere
+            if localSourceSelection != newSelection {
+                localSourceSelection = newSelection
+            }
+        }
+        .onChange(of: localTranslatedSelection) { _, newSelection in
+            // Update the view model when the user changes selection in the editor
+            if translatedSelectionFromViewModel != newSelection {
+                translatedSelectionFromViewModel = newSelection
+            }
+        }
+        .onChange(of: translatedSelectionFromViewModel) { _, newSelection in
+            // Update the editor when the view model's selection changes from elsewhere
+            if localTranslatedSelection != newSelection {
+                localTranslatedSelection = newSelection
+            }
+        }
     }
-}
-
-#Preview("Editor Area") {
-    let mocks = PreviewMocks.shared
-    return mocks.provide(to: EditorAreaView(
-        project: mocks.project,
-        translationViewModel: mocks.translationViewModel,
-        onShowPromptPreview: {}
-    ))
 }
