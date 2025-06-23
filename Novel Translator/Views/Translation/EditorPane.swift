@@ -10,9 +10,6 @@ import SwiftUI
 import STTextViewSwiftUI
 import STTextView
 
-/// A highly isolated view containing only the HSplitView and the two STTextView editors.
-/// This prevents re-renders from parent "chrome" (like token counters) from affecting the editors.
-/// It uses local @State for selection to prevent scroll jitter, while syncing with the parent ViewModel.
 struct EditorPane: View {
     // Bindings for the text content
     @Binding var sourceText: AttributedString
