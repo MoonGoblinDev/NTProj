@@ -1,8 +1,8 @@
 //
-//  ChatView.swift
-//  Novel Translator
+// ChatView.swift
+// Novel Translator
 //
-//  Created by Bregas Satria Wicaksono on 21/06/25.
+// Created by Bregas Satria Wicaksono on 21/06/25.
 //
 
 import SwiftUI
@@ -10,6 +10,7 @@ import SwiftUI
 struct ChatView: View {
     @State private var viewModel: ChatViewModel
     @State private var isAddChapterPopoverPresented = false
+    
     
     @ObservedObject var project: TranslationProject
     
@@ -26,42 +27,60 @@ struct ChatView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            Spacer()
             Picker("", selection: $viewModel.chatWindow) {
-                Text("\(ChatViewModel.Window.chat.symbol) Chat")
-                Text("\(ChatViewModel.Window.archivedChat.symbol) Archive")
+                ForEach(ChatViewModel.Window.allCases) { window in
+                    Text("\(window.symbol) \(window.rawValue)").tag(window)
+                }
             }
             .pickerStyle(.segmented)
             .padding(.horizontal)
-            
-            //Chat Action
-            HStack{
-                Spacer()
-                Button(action: {
-                    // Save
-                }) {
-                    Text("􀈄")
-                }
-                .buttonStyle(.borderless)
-                
-                Button(action: {
-                    // Reset
-                }) {
-                    Text("􀍿")
-                }
-                .buttonStyle(.borderless)
-                
-                Button(action: {
-                    // option
-                }) {
-                    Text("􀣋")
-                }
-                .buttonStyle(.borderless)
-                
-            }
             .padding(.top)
+            
+            //Chat Actions
+            HStack {
+                Spacer()
+                
+                Button(action: viewModel.archiveCurrentChat) {
+                    Image(systemName: "archivebox")
+                }
+                .buttonStyle(.plain)
+                .help("Archive Current Chat")
+                .disabled(!viewModel.canArchiveOrReset || viewModel.chatWindow == .archivedChat)
+                
+                Button(action: viewModel.resetChat) {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .buttonStyle(.plain)
+                .help("Reset Current Chat")
+                .disabled(!viewModel.canArchiveOrReset || viewModel.chatWindow == .archivedChat)
+                
+                Menu {
+                    Button("Clear Chat Archive", role: .destructive, action: viewModel.clearArchive)
+                        .disabled(viewModel.archivedConversations.isEmpty)
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .frame(width: 24)
+            }
+            .font(.title3)
+            .padding(.vertical, 4)
             .padding(.horizontal)
             
+            // Content based on picker
+            if viewModel.chatWindow == .chat {
+                chatInterface
+            } else {
+                archiveInterface
+            }
+        }
+        .navigationTitle(project.name)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private var chatInterface: some View {
+        VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
@@ -85,8 +104,6 @@ struct ChatView: View {
             
             Divider()
             
-            
-
             if viewModel.mode == .focus {
                 contextSelectionArea
                     .padding()
@@ -95,12 +112,57 @@ struct ChatView: View {
                 mode
                 inputArea
             }
-            
         }
-        .navigationTitle(project.name)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-
+    
+    @ViewBuilder
+    private var archiveInterface: some View {
+        if viewModel.archivedConversations.isEmpty {
+            VStack{
+                Spacer()
+                ContentUnavailableView("No Archived Chats", systemImage: "archivebox", description: Text("Chats you archive will appear here."))
+                Spacer()
+            }
+            
+        } else {
+            List {
+                ForEach(Array(viewModel.archivedConversations.enumerated()), id: \.offset) { index, conversation in
+                    DisclosureGroup {
+                        VStack(alignment: .leading) {
+                            ForEach(conversation) { message in
+                                MessageView(message: message)
+                                    .padding(.vertical, 4)
+                            }
+                        }
+                        .padding(.leading)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let firstUserMessage = conversation.first(where: { $0.role == .user }) {
+                                Text(firstUserMessage.content)
+                                    .fontWeight(.semibold)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            } else {
+                                Text("Archived Chat")
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            //TODO add date
+                            
+//                            if let firstMessage = conversation.first {
+//                                Text(firstMessage.timestamp.formattedRelativeDate(), style: .relative)
+//                                    .font(.caption)
+//                                    .foregroundStyle(.secondary)
+//                            }
+                        }
+                    }
+                }
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+        }
+    }
+    
     private var mode: some View {
         Menu {
             ForEach(ChatViewModel.ChatMode.allCases) { mode in
@@ -113,20 +175,20 @@ struct ChatView: View {
                     }
                     
                 }
-                        }
+            }
         }
-        label:
+    label:
         {
-                Text(modeSymbol)
+            Text(modeSymbol)
                 .font(.system(size: 20))
         }
-
+        
         .font(.title)
         .menuStyle(.borderlessButton)
         .frame(width: 35, height: 35)
         .padding(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 0))
     }
-
+    
     private var modeSymbol: String {
         switch viewModel.mode {
         case .global:
@@ -137,42 +199,42 @@ struct ChatView: View {
     }
     
     private var contextSelectionArea: some View {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack {
-                    Button {
-                        isAddChapterPopoverPresented = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.bordered)
-                    .clipShape(Circle())
-                    .background(.green.opacity(0.3), in: Circle())
-                    .popover(isPresented: $isAddChapterPopoverPresented, arrowEdge: .bottom) {
-                        addChapterPopoverView
-                    }
-                    if viewModel.selectedFocusChapters.isEmpty {
-                        Text("No chapters selected. Click '+' to add context.")
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 4)
-                    } else {
-                        ForEach(viewModel.selectedFocusChapters) { chapter in
-                            FocusChapterTagView(
-                                chapter: chapter,
-                                inclusionType: Binding(
-                                    get: { viewModel.focusContext[chapter.id] ?? .both },
-                                    set: { viewModel.focusContext[chapter.id] = $0 }
-                                ),
-                                onRemove: {
-                                    viewModel.focusContext.removeValue(forKey: chapter.id)
-                                }
-                            )
-                            .frame(maxWidth: 200)
-                            .padding(.horizontal, 3)
-                        }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack {
+                Button {
+                    isAddChapterPopoverPresented = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.bordered)
+                .clipShape(Circle())
+                .background(.green.opacity(0.3), in: Circle())
+                .popover(isPresented: $isAddChapterPopoverPresented, arrowEdge: .bottom) {
+                    addChapterPopoverView
+                }
+                if viewModel.selectedFocusChapters.isEmpty {
+                    Text("No chapters selected. Click '+' to add context.")
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 4)
+                } else {
+                    ForEach(viewModel.selectedFocusChapters) { chapter in
+                        FocusChapterTagView(
+                            chapter: chapter,
+                            inclusionType: Binding(
+                                get: { viewModel.focusContext[chapter.id] ?? .both },
+                                set: { viewModel.focusContext[chapter.id] = $0 }
+                            ),
+                            onRemove: {
+                                viewModel.focusContext.removeValue(forKey: chapter.id)
+                            }
+                        )
+                        .frame(maxWidth: 200)
+                        .padding(.horizontal, 3)
                     }
                 }
             }
-                    
+        }
+        
     }
     
     @ViewBuilder
@@ -214,11 +276,11 @@ struct ChatView: View {
                         .onSubmit(viewModel.sendMessage)
                         .disabled(viewModel.isThinking)
                         .padding(.horizontal, 8)
-                        
+                    
                 }
-                
             
-                
+            
+            
             
             Button(action: viewModel.sendMessage) {
                 Image(systemName: "arrow.up.circle.fill")
@@ -229,8 +291,9 @@ struct ChatView: View {
             .padding(.trailing)
         }
         .padding(.vertical)
-       
+        
     }
+    
 }
 
 // MARK: - Local Subviews
@@ -239,10 +302,11 @@ fileprivate struct FocusChapterTagView: View {
     let chapter: Chapter
     @Binding var inclusionType: ChatViewModel.ContextInclusion
     let onRemove: () -> Void
-
+    
+    
     var body: some View {
         HStack(spacing: 8) {
-                        
+            
             VStack(alignment: .leading, spacing: 2) {
                 Text("#\(chapter.chapterNumber): \(chapter.title)")
                     .font(.callout)
@@ -264,7 +328,7 @@ fileprivate struct FocusChapterTagView: View {
                             .background(.red.opacity(0.3), in: Circle())
                     }
                     .buttonStyle(.plain)
-
+                    
                 }
                 
                 
@@ -276,11 +340,13 @@ fileprivate struct FocusChapterTagView: View {
         .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
         
     }
+    
 }
 
 // MARK: - MessageView Subview
 fileprivate struct MessageView: View {
     let message: ChatMessage
+    
     
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -311,6 +377,7 @@ fileprivate struct MessageView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+    
 }
 
 // MARK: - Previews
@@ -327,6 +394,7 @@ fileprivate struct MessageView: View {
 #Preview("Chat - Focus Mode") {
     let mocks = PreviewMocks.shared
     
+    
     // ** THIS IS THE FIX **
     // Encapsulate the VM setup in a closure to satisfy the ViewBuilder.
     let vm: ChatViewModel = {
@@ -339,14 +407,17 @@ fileprivate struct MessageView: View {
         vm.focusContext[mocks.chapter3.id] = .source
         return vm
     }()
-
+    
     // Inject the configured view model
     ChatView(project: mocks.project, viewModel: vm)
         .frame(width: 450, height: 600)
+    
+    
 }
 
 #Preview("Chat - With Messages") {
     let mocks = PreviewMocks.shared
+    
     
     // ** THIS IS THE FIX **
     // Encapsulate the VM setup in a closure to satisfy the ViewBuilder.
@@ -363,4 +434,5 @@ fileprivate struct MessageView: View {
     
     ChatView(project: mocks.project, viewModel: vm)
         .frame(width: 450, height: 600)
+    
 }
