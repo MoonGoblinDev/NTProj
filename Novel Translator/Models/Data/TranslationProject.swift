@@ -1,4 +1,6 @@
+// FILE: Novel Translator/Models/Data/TranslationProject.swift
 import SwiftUI
+
 
 
 class TranslationProject: ObservableObject, Codable, Identifiable, Equatable {
@@ -12,6 +14,7 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable {
     
     @Published var chapters: [Chapter]
     @Published var glossaryEntries: [GlossaryEntry]
+    @Published var archivedChats: [ArchivedChatConversation] = []
     
 
     @Published var stats: TranslationStats
@@ -51,6 +54,7 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable {
 
         self.chapters = []
         self.glossaryEntries = []
+        self.archivedChats = []
         
         self.stats = TranslationStats()
         self.importSettings = ImportSettings()
@@ -61,7 +65,7 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable {
     
     enum CodingKeys: String, CodingKey {
         case id, name, sourceLanguage, targetLanguage, createdDate, lastModifiedDate, projectDescription
-        case chapters, glossaryEntries, stats, importSettings, translationConfig
+        case chapters, glossaryEntries, archivedChats, stats, importSettings, translationConfig
     }
     
     required init(from decoder: Decoder) throws {
@@ -75,6 +79,7 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable {
         projectDescription = try container.decodeIfPresent(String.self, forKey: .projectDescription)
         chapters = try container.decode([Chapter].self, forKey: .chapters)
         glossaryEntries = try container.decode([GlossaryEntry].self, forKey: .glossaryEntries)
+        archivedChats = try container.decodeIfPresent([ArchivedChatConversation].self, forKey: .archivedChats) ?? []
         stats = try container.decode(TranslationStats.self, forKey: .stats)
         importSettings = try container.decode(ImportSettings.self, forKey: .importSettings)
         translationConfig = try container.decodeIfPresent(TranslationConfig.self, forKey: .translationConfig) ?? TranslationConfig()
@@ -91,6 +96,7 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable {
         try container.encode(projectDescription, forKey: .projectDescription)
         try container.encode(chapters, forKey: .chapters)
         try container.encode(glossaryEntries, forKey: .glossaryEntries)
+        try container.encode(archivedChats, forKey: .archivedChats)
         try container.encode(stats, forKey: .stats)
         try container.encode(importSettings, forKey: .importSettings)
         try container.encode(translationConfig, forKey: .translationConfig)
@@ -99,5 +105,23 @@ class TranslationProject: ObservableObject, Codable, Identifiable, Equatable {
 
     static func == (lhs: TranslationProject, rhs: TranslationProject) -> Bool {
         lhs.id == rhs.id
+    }
+}
+
+/// A model for a single, archived chat conversation.
+struct ArchivedChatConversation: Identifiable, Codable, Hashable {
+    var id: UUID = UUID()
+    var messages: [ChatMessage]
+    var lastModified: Date = Date()
+    
+    /// A computed property to get a title for display in the archive list.
+    var title: String {
+        // Find the first user message to use as a title.
+        if let firstUserMessage = messages.first(where: { $0.role == .user }) {
+            let content = firstUserMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            return content.isEmpty ? "Chat from \(lastModified.formatted(date: .abbreviated, time: .shortened))" : content
+        }
+        // Fallback title
+        return "Chat from \(lastModified.formatted(date: .abbreviated, time: .shortened))"
     }
 }

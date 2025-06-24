@@ -1,3 +1,4 @@
+// FILE: Novel Translator/Views/Chat/ChatView.swift
 //
 // ChatView.swift
 // Novel Translator
@@ -56,7 +57,7 @@ struct ChatView: View {
                 
                 Menu {
                     Button("Clear Chat Archive", role: .destructive, action: viewModel.clearArchive)
-                        .disabled(viewModel.archivedConversations.isEmpty)
+                        .disabled(project.archivedChats.isEmpty)
                 } label: {
                     Image(systemName: "gearshape")
                 }
@@ -117,7 +118,9 @@ struct ChatView: View {
     
     @ViewBuilder
     private var archiveInterface: some View {
-        if viewModel.archivedConversations.isEmpty {
+        let sortedArchives = project.archivedChats.sorted { $0.lastModified > $1.lastModified }
+
+        if sortedArchives.isEmpty {
             VStack{
                 Spacer()
                 ContentUnavailableView("No Archived Chats", systemImage: "archivebox", description: Text("Chats you archive will appear here."))
@@ -126,37 +129,26 @@ struct ChatView: View {
             
         } else {
             List {
-                ForEach(Array(viewModel.archivedConversations.enumerated()), id: \.offset) { index, conversation in
-                    DisclosureGroup {
-                        VStack(alignment: .leading) {
-                            ForEach(conversation) { message in
-                                MessageView(message: message)
-                                    .padding(.vertical, 4)
-                            }
-                        }
-                        .padding(.leading)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            if let firstUserMessage = conversation.first(where: { $0.role == .user }) {
-                                Text(firstUserMessage.content)
-                                    .fontWeight(.semibold)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                            } else {
-                                Text("Archived Chat")
-                                    .fontWeight(.semibold)
-                            }
+                ForEach(sortedArchives) { conversation in
+                    Button(action: {
+                        viewModel.loadConversation(conversation)
+                    }) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(conversation.title)
+                                .fontWeight(.semibold)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                             
-                            //TODO add date
-                            
-//                            if let firstMessage = conversation.first {
-//                                Text(firstMessage.timestamp.formattedRelativeDate(), style: .relative)
-//                                    .font(.caption)
-//                                    .foregroundStyle(.secondary)
-//                            }
+                            Text(conversation.lastModified.formatted(.relative(presentation: .named)))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
+                .onDelete(perform: viewModel.deleteConversation)
             }
             .listStyle(.inset)
             .scrollContentBackground(.hidden)

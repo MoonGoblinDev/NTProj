@@ -1,3 +1,4 @@
+// FILE: Novel Translator/App/PreviewMocks.swift
 //
 //  PreviewMocks.swift
 //  Novel Translator
@@ -107,6 +108,15 @@ struct PreviewMocks {
             contextDescription: "A sleeping dragon."
         )
 
+        // --- Create Archived Chats ---
+        let chat1_msg1 = ChatMessage(role: .user, content: "What is Excalibur?", sources: nil, timestamp: Date().addingTimeInterval(-7200))
+        let chat1_msg2 = ChatMessage(role: .assistant, content: "It is the legendary sword wielded by Arthur.", sources: ["Ch. 1"], timestamp: Date().addingTimeInterval(-7100))
+        let archivedChat1 = ArchivedChatConversation(messages: [chat1_msg1, chat1_msg2], lastModified: Date().addingTimeInterval(-3600))
+
+        let chat2_msg1 = ChatMessage(role: .user, content: "Tell me about Ignis the dragon.", sources: nil, timestamp: Date().addingTimeInterval(-8000))
+        let chat2_msg2 = ChatMessage(role: .assistant, content: "Ignis is a dragon that sleeps on a pile of gold in a dark lair.", sources: ["Ch. 2"], timestamp: Date().addingTimeInterval(-7900))
+        let archivedChat2 = ArchivedChatConversation(messages: [chat2_msg1, chat2_msg2], lastModified: Date().addingTimeInterval(-7200))
+
         // --- Create Translation Project ---
         let proj = TranslationProject(
             name: "The Knight's Tale",
@@ -115,6 +125,7 @@ struct PreviewMocks {
         )
         proj.chapters = [self.chapter1, self.chapter2, self.chapter3]
         proj.glossaryEntries = [self.glossaryEntry1, self.glossaryEntry2, glossaryEntry3, glossaryEntry4]
+        proj.archivedChats = [archivedChat1, archivedChat2]
         proj.stats.totalChapters = 3
         proj.stats.completedChapters = 1
         proj.stats.totalWords = 100
