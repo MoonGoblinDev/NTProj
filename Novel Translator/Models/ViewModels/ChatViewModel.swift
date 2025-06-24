@@ -45,6 +45,10 @@ class ChatViewModel {
                 // 2. Build the prompt
                 let prompt = ragService.generatePrompt(query: trimmedInput, chunks: chunks)
                 
+                print("--- RAG PROMPT SENT TO LLM ---")
+                print(prompt)
+                print("--- END OF RAG PROMPT ---")
+                
                 // 3. Get LLM Service
                 guard let provider = projectManager.settings.selectedProvider else {
                     throw LLMServiceError.serviceNotImplemented("No provider selected")

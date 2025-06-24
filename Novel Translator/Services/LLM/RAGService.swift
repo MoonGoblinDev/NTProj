@@ -36,24 +36,46 @@ class RAGService {
         
         var allChunks: [TextChunk] = []
         
-        // Create chunks from both source and translated text paragraphs.
+        // Create overlapping chunks from both source and translated text to better capture context.
         for chapter in project.chapters.sorted(by: { $0.chapterNumber < $1.chapterNumber }) {
+            // A more robust chunking strategy using a sliding window.
+            // This helps capture context that spans across multiple lines.
+            let chunkSize = 5 // The number of lines in each chunk.
+            let chunkOverlap = 2 // The number of lines to overlap between chunks.
+            let strideBy = max(1, chunkSize - chunkOverlap)
+
+            // Helper function to create overlapping chunks from a list of lines
+            let createOverlappingChunks = { (lines: [String]) -> [String] in
+                var chunks: [String] = []
+                guard !lines.isEmpty else { return chunks }
+
+                for i in stride(from: 0, to: lines.count, by: strideBy) {
+                    let end = min(i + chunkSize, lines.count)
+                    if i < end {
+                        let chunkContent = lines[i..<end].joined(separator: "\n")
+                        if !chunkContent.isEmpty {
+                            chunks.append(chunkContent)
+                        }
+                    }
+                }
+                return chunks
+            }
+
             // Process raw content
-            let rawParagraphs = chapter.rawContent.components(separatedBy: .newlines)
+            let rawLines = chapter.rawContent.components(separatedBy: .newlines)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
-            
-            for paragraph in rawParagraphs {
-                allChunks.append(TextChunk(content: paragraph, chapterID: chapter.id, chapterTitle: chapter.title, chapterNumber: chapter.chapterNumber))
+            let rawChunks = createOverlappingChunks(rawLines)
+            for chunkContent in rawChunks {
+                allChunks.append(TextChunk(content: chunkContent, chapterID: chapter.id, chapterTitle: chapter.title, chapterNumber: chapter.chapterNumber))
             }
             
             // Process translated content
             if let translated = chapter.translatedContent {
-                let translatedParagraphs = translated.components(separatedBy: .newlines)
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.isEmpty }
-                for paragraph in translatedParagraphs {
-                    allChunks.append(TextChunk(content: paragraph, chapterID: chapter.id, chapterTitle: chapter.title, chapterNumber: chapter.chapterNumber))
+                let translatedLines = translated.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                let translatedChunks = createOverlappingChunks(translatedLines)
+                for chunkContent in translatedChunks {
+                    allChunks.append(TextChunk(content: chunkContent, chapterID: chapter.id, chapterTitle: chapter.title, chapterNumber: chapter.chapterNumber))
                 }
             }
         }
