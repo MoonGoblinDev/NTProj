@@ -9,25 +9,30 @@ struct ContentView: View {
     var body: some View {
         Group {
             if let project = projectManager.currentProject {
-                // We use a 2-column split view. The "detail" area will contain our custom logic.
+                // Use a 2-column split view with inspector for right sidebar
                 NavigationSplitView {
                     SidebarView(project: project)
                         .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 600)
-
                 } detail: {
-                    // The magic happens here. We switch the detail's content based on visibility.
-                    if appContext.isChatSidebarVisible {
-                        // When visible, use an HSplitView for the resizable divider.
-                        HSplitView {
-                            TranslationWorkspaceView(project: project)
-                                .frame(minWidth: 600)
-                            
-                            ChatView(project: project, projectManager: projectManager)
+                    TranslationWorkspaceView(project: project)
+                        .frame(minWidth: 600)
+                }
+                .inspector(isPresented: $appContext.isChatSidebarVisible) {
+                    ChatView(project: project, projectManager: projectManager, workspaceViewModel: workspaceViewModel)
+                        .inspectorColumnWidth(min: 300, ideal: 400, max: 500)
+                        .toolbar{
+                            Button {
+                                                    withAnimation(.spring()) {
+                                                        appContext.isChatSidebarVisible.toggle()
+                                                    }
+                                                } label: {
+                                                    Label("Toggle Chat", systemImage: "bubble.right")
+                                                }
+                                                .symbolVariant(appContext.isChatSidebarVisible ? .fill : .none)
+                                                .keyboardShortcut("b", modifiers: [.command, .shift])
+                                                .help("Toggle Chat Panel (⌘⇧B)")
                         }
-                    } else {
-                        // When hidden, show only the workspace. It will now expand to fill the space.
-                        TranslationWorkspaceView(project: project)
-                    }
+
                 }
             } else {
                 WelcomeView()
@@ -42,6 +47,7 @@ struct ContentView: View {
                 appContext.glossaryEntryIDForDetail = uuid
             }
         }
-        // No .onChange modifier is needed here anymore. The logic is self-contained.
+        
     }
+        
 }

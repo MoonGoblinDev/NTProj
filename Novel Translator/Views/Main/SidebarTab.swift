@@ -7,7 +7,7 @@
 
 import Foundation
 
-// This enum is now public (internal by default) and can be shared by multiple views.
+
 enum SidebarTab: String, CaseIterable {
     case chapters = "􀤞"
     case glossary = "􀅶"

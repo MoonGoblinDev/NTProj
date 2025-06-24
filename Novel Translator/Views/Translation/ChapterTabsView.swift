@@ -66,8 +66,8 @@ fileprivate struct ChapterTabItem: View {
         .background(
             isActive ? Color.accentColor.opacity(0.2) : (isHovered ? Color.secondary.opacity(0.15) : Color.clear)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 20 , style: .continuous))
-        .contentShape(Rectangle())
+        //.clipShape(RoundedRectangle(cornerRadius: 20 , style: .continuous))
+        //.contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.1)) {

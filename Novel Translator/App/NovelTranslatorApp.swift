@@ -41,7 +41,9 @@ struct NovelTranslatorApp: App {
             
             }
             TextEditingCommands()
+            InspectorCommands()
         }
+        
     }
     
     // MARK: - Menu Command Helpers

@@ -9,17 +9,59 @@ import SwiftUI
 
 struct ChatView: View {
     @State private var viewModel: ChatViewModel
+    @State private var isAddChapterPopoverPresented = false
     
-    // The project is owned by the ViewModel, but we observe it here for the view's title
     @ObservedObject var project: TranslationProject
     
-    init(project: TranslationProject, projectManager: ProjectManager) {
+    init(project: TranslationProject, projectManager: ProjectManager, workspaceViewModel: WorkspaceViewModel) {
         self.project = project
-        _viewModel = State(initialValue: ChatViewModel(projectManager: projectManager, project: project))
+        _viewModel = State(initialValue: ChatViewModel(projectManager: projectManager, project: project, workspaceViewModel: workspaceViewModel))
+    }
+    
+    // This initializer is for SwiftUI Previews
+    init(project: TranslationProject, viewModel: ChatViewModel) {
+        self.project = project
+        self._viewModel = State(initialValue: viewModel)
     }
     
     var body: some View {
         VStack(spacing: 0) {
+            Spacer()
+            Picker("", selection: $viewModel.chatWindow) {
+                Text("\(ChatViewModel.Window.chat.symbol) Chat")
+                Text("\(ChatViewModel.Window.archivedChat.symbol) Archive")
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            
+            //Chat Action
+            HStack{
+                Spacer()
+                Button(action: {
+                    // Save
+                }) {
+                    Text("􀈄")
+                }
+                .buttonStyle(.borderless)
+                
+                Button(action: {
+                    // Reset
+                }) {
+                    Text("􀍿")
+                }
+                .buttonStyle(.borderless)
+                
+                Button(action: {
+                    // option
+                }) {
+                    Text("􀣋")
+                }
+                .buttonStyle(.borderless)
+                
+            }
+            .padding(.top)
+            .padding(.horizontal)
+            
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
@@ -43,30 +85,196 @@ struct ChatView: View {
             
             Divider()
             
-            inputArea
+            
+
+            if viewModel.mode == .focus {
+                contextSelectionArea
+                    .padding()
+            }
+            HStack{
+                mode
+                inputArea
+            }
+            
         }
         .navigationTitle(project.name)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        //.background(OpaqueVisualEffect().ignoresSafeArea())
+    }
+
+    private var mode: some View {
+        Menu {
+            ForEach(ChatViewModel.ChatMode.allCases) { mode in
+                Button(action: {
+                    viewModel.mode = mode
+                }) {
+                    HStack {
+                        Text("\(mode.symbol) \(mode.rawValue)")
+                            .foregroundColor(viewModel.mode == mode ? Color.accentColor : Color.primary)
+                    }
+                    
+                }
+                        }
+        }
+        label:
+        {
+                Text(modeSymbol)
+                .font(.system(size: 20))
+        }
+
+        .font(.title)
+        .menuStyle(.borderlessButton)
+        .frame(width: 35, height: 35)
+        .padding(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 0))
+    }
+
+    private var modeSymbol: String {
+        switch viewModel.mode {
+        case .global:
+            return "􀆪"
+        case .focus:
+            return "􀊫"
+        }
+    }
+    
+    private var contextSelectionArea: some View {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    Button {
+                        isAddChapterPopoverPresented = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.bordered)
+                    .clipShape(Circle())
+                    .background(.green.opacity(0.3), in: Circle())
+                    .popover(isPresented: $isAddChapterPopoverPresented, arrowEdge: .bottom) {
+                        addChapterPopoverView
+                    }
+                    if viewModel.selectedFocusChapters.isEmpty {
+                        Text("No chapters selected. Click '+' to add context.")
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
+                    } else {
+                        ForEach(viewModel.selectedFocusChapters) { chapter in
+                            FocusChapterTagView(
+                                chapter: chapter,
+                                inclusionType: Binding(
+                                    get: { viewModel.focusContext[chapter.id] ?? .both },
+                                    set: { viewModel.focusContext[chapter.id] = $0 }
+                                ),
+                                onRemove: {
+                                    viewModel.focusContext.removeValue(forKey: chapter.id)
+                                }
+                            )
+                            .frame(maxWidth: 200)
+                            .padding(.horizontal, 3)
+                        }
+                    }
+                }
+            }
+                    
+    }
+    
+    @ViewBuilder
+    private var addChapterPopoverView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Add Chapters to Context").font(.headline).padding()
+            Divider()
+            
+            if viewModel.unselectedFocusChapters.isEmpty {
+                Text("All chapters are already selected.")
+                    .foregroundStyle(.secondary)
+                    .padding()
+            } else {
+                List(viewModel.unselectedFocusChapters) { chapter in
+                    Button {
+                        viewModel.focusContext[chapter.id] = .both
+                    } label: {
+                        HStack {
+                            Text("#\(chapter.chapterNumber) - \(chapter.title)")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .frame(minWidth: 300, idealHeight: 400)
     }
     
     private var inputArea: some View {
-        HStack(alignment: .bottom, spacing: 12) {
-            TextField("Ask about the story...", text: $viewModel.currentInput, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...5)
-                .onSubmit(viewModel.sendMessage)
-                .disabled(viewModel.isThinking)
+        HStack {
+            Capsule()
+                .fill(.background.quinary)
+                .frame(maxWidth: .infinity, maxHeight: 30)
+                .overlay{
+                    TextField("Ask a question...", text: $viewModel.currentInput, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...5)
+                        .onSubmit(viewModel.sendMessage)
+                        .disabled(viewModel.isThinking)
+                        .padding(.horizontal, 8)
+                        
+                }
+                
+            
+                
             
             Button(action: viewModel.sendMessage) {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
+                    .font(.title)
             }
             .buttonStyle(.plain)
             .disabled(viewModel.currentInput.trimmingCharacters(in: .whitespaces).isEmpty || viewModel.isThinking)
+            .padding(.trailing)
         }
-        .padding(12)
-        .background(.background.secondary)
+        .padding(.vertical)
+       
+    }
+}
+
+// MARK: - Local Subviews
+
+fileprivate struct FocusChapterTagView: View {
+    let chapter: Chapter
+    @Binding var inclusionType: ChatViewModel.ContextInclusion
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+                        
+            VStack(alignment: .leading, spacing: 2) {
+                Text("#\(chapter.chapterNumber): \(chapter.title)")
+                    .font(.callout)
+                    .lineLimit(1)
+                
+                HStack{
+                    Picker("Include", selection: $inclusionType) {
+                        ForEach(ChatViewModel.ContextInclusion.allCases) { type in
+                            Text(type.rawValue).tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .scaleEffect(0.8, anchor: .leading)
+                    Button(action: onRemove) {
+                        Image(systemName: "xmark")
+                            .font(.caption.weight(.bold))
+                            .padding(2)
+                            .background(.red.opacity(0.3), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+
+                }
+                
+                
+            }
+            
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+        
     }
 }
 
@@ -103,4 +311,56 @@ fileprivate struct MessageView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+}
+
+// MARK: - Previews
+#Preview("Chat - Global Mode") {
+    let mocks = PreviewMocks.shared
+    ChatView(
+        project: mocks.project,
+        projectManager: mocks.projectManager,
+        workspaceViewModel: mocks.workspaceViewModel
+    )
+    .frame(width: 450, height: 600)
+}
+
+#Preview("Chat - Focus Mode") {
+    let mocks = PreviewMocks.shared
+    
+    // ** THIS IS THE FIX **
+    // Encapsulate the VM setup in a closure to satisfy the ViewBuilder.
+    let vm: ChatViewModel = {
+        let vm = ChatViewModel(
+            projectManager: mocks.projectManager,
+            project: mocks.project,
+            workspaceViewModel: mocks.workspaceViewModel
+        )
+        vm.mode = .focus
+        vm.focusContext[mocks.chapter3.id] = .source
+        return vm
+    }()
+
+    // Inject the configured view model
+    ChatView(project: mocks.project, viewModel: vm)
+        .frame(width: 450, height: 600)
+}
+
+#Preview("Chat - With Messages") {
+    let mocks = PreviewMocks.shared
+    
+    // ** THIS IS THE FIX **
+    // Encapsulate the VM setup in a closure to satisfy the ViewBuilder.
+    let vm: ChatViewModel = {
+        let vm = ChatViewModel(
+            projectManager: mocks.projectManager,
+            project: mocks.project,
+            workspaceViewModel: mocks.workspaceViewModel
+        )
+        vm.messages.append(ChatMessage(role: .user, content: "Tell me about Arthur.", sources: nil))
+        vm.messages.append(ChatMessage(role: .assistant, content: "Arthur is a brave knight from the Kingdom of Eldoria. He wields the legendary sword, Excalibur.", sources: ["Ch. 1"]))
+        return vm
+    }()
+    
+    ChatView(project: mocks.project, viewModel: vm)
+        .frame(width: 450, height: 600)
 }
