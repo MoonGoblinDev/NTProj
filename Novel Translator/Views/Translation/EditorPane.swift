@@ -32,50 +32,52 @@ struct EditorPane: View {
     ]
 
     var body: some View {
-        HSplitView {
-            TextView(
-                text: $sourceText,
-                selection: $localSourceSelection, // Driven by local @State
-                options: textViewOptions
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            TextView(
-                text: $translatedText,
-                selection: $localTranslatedSelection, // Driven by local @State
-                options: textViewOptions
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .disabled(isDisabled)
-        }
-        // This block ensures the local state and the view model state are always in sync.
-        .onAppear {
-            localSourceSelection = sourceSelectionFromViewModel
-            localTranslatedSelection = translatedSelectionFromViewModel
-        }
-        .onChange(of: localSourceSelection) { _, newSelection in
-            // Update the view model when the user changes selection in the editor
-            if sourceSelectionFromViewModel != newSelection {
-                sourceSelectionFromViewModel = newSelection
+            HSplitView {
+                TextView(
+                    text: $sourceText,
+                    selection: $localSourceSelection, // Driven by local @State
+                    options: textViewOptions
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                
+                TextView(
+                    text: $translatedText,
+                    selection: $localTranslatedSelection, // Driven by local @State
+                    options: textViewOptions
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .disabled(isDisabled)
+            }
+            .onAppear {
+                localSourceSelection = sourceSelectionFromViewModel
+                localTranslatedSelection = translatedSelectionFromViewModel
+            }
+            .onChange(of: localSourceSelection) { _, newSelection in
+                if sourceSelectionFromViewModel != newSelection {
+                    sourceSelectionFromViewModel = newSelection
+                }
+            }
+            .onChange(of: sourceSelectionFromViewModel) { _, newSelection in
+                // Defer updating local selection to give STTextView time to process text changes first,
+                // which might have occurred in the same update cycle.
+                DispatchQueue.main.async {
+                    if localSourceSelection != newSelection {
+                        localSourceSelection = newSelection
+                    }
+                }
+            }
+            .onChange(of: localTranslatedSelection) { _, newSelection in
+                if translatedSelectionFromViewModel != newSelection {
+                    translatedSelectionFromViewModel = newSelection
+                }
+            }
+            .onChange(of: translatedSelectionFromViewModel) { _, newSelection in
+                // Defer updating local selection. This is the key fix for the translation crash.
+                DispatchQueue.main.async {
+                    if localTranslatedSelection != newSelection {
+                        localTranslatedSelection = newSelection
+                    }
+                }
             }
         }
-        .onChange(of: sourceSelectionFromViewModel) { _, newSelection in
-            // Update the editor when the view model's selection changes from elsewhere
-            if localSourceSelection != newSelection {
-                localSourceSelection = newSelection
-            }
-        }
-        .onChange(of: localTranslatedSelection) { _, newSelection in
-            // Update the view model when the user changes selection in the editor
-            if translatedSelectionFromViewModel != newSelection {
-                translatedSelectionFromViewModel = newSelection
-            }
-        }
-        .onChange(of: translatedSelectionFromViewModel) { _, newSelection in
-            // Update the editor when the view model's selection changes from elsewhere
-            if localTranslatedSelection != newSelection {
-                localTranslatedSelection = newSelection
-            }
-        }
-    }
 }

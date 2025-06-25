@@ -80,33 +80,37 @@ struct EditorAreaView: View {
                 }
             }
             .onAppear {
-                // Initial load when the view appears for the first time
-                updateSourceGlossaryAndHighlights()
-                updateTranslatedGlossaryAndHighlights()
-            }
-            .onChange(of: activeChapter?.id) {
-                // When chapter changes, force a full recalculation
-                resetEditorSearch()
-                lastProcessedTextContent = nil
-                lastProcessedTranslatedTextContent = nil
-                updateSourceGlossaryAndHighlights()
-                updateTranslatedGlossaryAndHighlights()
-            }
-            .onChange(of: activeEditorState?.sourceAttributedText) {
-                // When text is typed, trigger the controlled update asynchronously.
-                // This breaks the update cycle that causes jittering.
-                DispatchQueue.main.async {
-                    updateSourceGlossaryAndHighlights()
-                }
-            }
-            .onChange(of: activeEditorState?.translatedAttributedText) {
-                DispatchQueue.main.async {
-                    updateTranslatedGlossaryAndHighlights()
-                }
-            }
-            .onChange(of: activeEditorState?.sourceSelection) { _, newSelection in
-                handleSourceGlossarySelection(newSelection)
-            }
+                            // Initial load when the view appears for the first time
+                            updateSourceGlossaryAndHighlights()
+                            updateTranslatedGlossaryAndHighlights()
+                        }
+                        .onChange(of: activeChapter?.id) {
+                            // When chapter changes, force a full recalculation
+                            resetEditorSearch()
+                            lastProcessedTextContent = nil
+                            lastProcessedTranslatedTextContent = nil
+                            updateSourceGlossaryAndHighlights()
+                            updateTranslatedGlossaryAndHighlights()
+                        }
+                        .onChange(of: activeEditorState?.sourceAttributedText) {
+                            // For source text (user typing), update highlights synchronously.
+                            updateSourceGlossaryAndHighlights()
+                        }
+                        .onChange(of: activeEditorState?.translatedAttributedText) {
+                            // For translated text:
+                            // If actively streaming, dispatch highlight update asynchronously to avoid rapid double-updates.
+                            // Otherwise (e.g., user manually editing translated text), update synchronously.
+                            if translationViewModel.isTranslating {
+                                DispatchQueue.main.async {
+                                    updateTranslatedGlossaryAndHighlights()
+                                }
+                            } else {
+                                updateTranslatedGlossaryAndHighlights()
+                            }
+                        }
+                        .onChange(of: activeEditorState?.sourceSelection) { _, newSelection in
+                            handleSourceGlossarySelection(newSelection)
+                        }
             .onChange(of: activeEditorState?.translatedSelection) { _, newSelection in
                 handleTranslatedGlossarySelection(newSelection)
             }

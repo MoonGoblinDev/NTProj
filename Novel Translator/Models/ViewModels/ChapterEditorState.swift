@@ -1,3 +1,4 @@
+// FILE: Novel Translator/Models/ViewModels/ChapterEditorState.swift
 import SwiftUI
 
 @Observable
@@ -38,12 +39,10 @@ class ChapterEditorState {
             .font: NSFont.systemFont(ofSize: 14)])
         self.translatedAttributedText = AttributedString(newText, attributes: container)
         
-        if let currentSelection = self.translatedSelection {
-            let newLength = newText.utf16.count // Use utf16.count for NSRange compatibility
-            if (currentSelection.location + currentSelection.length) > newLength {
-                self.translatedSelection = NSRange(location: newLength, length: 0)
-            }
-        }
+        // REMOVED: Do not modify self.translatedSelection here.
+        // STTextView should manage its own cursor during text appends.
+        // Programmatic selection will be handled by the caller (e.g., TranslationViewModel)
+        // only at the start and end of major operations.
     }
 
     // MARK: - Search & Replace Methods

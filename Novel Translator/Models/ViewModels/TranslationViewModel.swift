@@ -8,19 +8,12 @@ class TranslationViewModel {
     var isTranslating: Bool = false
     var errorMessage: String?
     
-    // REMOVED: This property was the source of the state conflict.
-    // var translationText: String = ""
-    
     private var translationService: TranslationService
     
     init() {
         self.translationService = TranslationService()
     }
     
-    // REMOVED: This method was unused and part of the faulty pattern.
-    // func setChapter(_ chapter: Chapter?) { ... }
-    
-    // MODIFIED: This function now accepts the WorkspaceViewModel to directly update state.
     func streamTranslateChapter(project: TranslationProject, chapter: Chapter, settings: AppSettings, workspace: WorkspaceViewModel) async {
         let activeProvider = settings.selectedProvider ?? .google
         
@@ -36,10 +29,11 @@ class TranslationViewModel {
         
         isTranslating = true
         errorMessage = nil
-        // MODIFIED: Use a local variable for accumulation.
         var accumulatedText = ""
-        // Clear previous translation directly in the editor state.
+        
+        // Clear previous translation and explicitly set selection to start of document
         workspace.activeEditorState?.updateTranslation(newText: "")
+        workspace.activeEditorState?.translatedSelection = NSRange(location: 0, length: 0)
         
         let startTime = Date()
         var finalInputTokens: Int?
@@ -50,10 +44,8 @@ class TranslationViewModel {
         
         let selectedPreset = settings.promptPresets.first { $0.id == settings.selectedPromptPresetID }
         
-        // --- Context gathering logic (unchanged) ---
         var previousContextText: String? = nil
         if project.translationConfig.includePreviousContext {
-            // Sort chapters to be sure of order
             let sortedChapters = project.chapters.sorted { $0.chapterNumber < $1.chapterNumber }
             if let currentChapterIndex = sortedChapters.firstIndex(where: { $0.id == chapter.id }) {
                 let count = project.translationConfig.previousContextChapterCount
@@ -65,7 +57,7 @@ class TranslationViewModel {
                     previousContextText = contextChapters
                         .compactMap { $0.translatedContent }
                         .filter { !$0.isEmpty }
-                        .joined(separator: "\n\n---\n\n") // Separator between chapters
+                        .joined(separator: "\n\n---\n\n")
                 }
             }
         }
@@ -88,8 +80,8 @@ class TranslationViewModel {
             let stream = llmService.streamTranslate(request: request)
             
             for try await chunk in stream {
-                // MODIFIED: Update local variable and call editor state update.
                 accumulatedText += chunk.textChunk
+                // Only update text content in ChapterEditorState. Do not change selection.
                 workspace.activeEditorState?.updateTranslation(newText: accumulatedText)
 
                 if chunk.isFinal {
@@ -98,20 +90,24 @@ class TranslationViewModel {
                 }
             }
             
-            // --- Post-processing step ---
-            var finalFullText = accumulatedText // Use the local variable
+            var finalFullText = accumulatedText
             if project.translationConfig.forceLineCountSync {
                 finalFullText = promptBuilder.postprocessLineSync(text: finalFullText)
                 // Update the UI one last time with the cleaned text
                 workspace.activeEditorState?.updateTranslation(newText: finalFullText)
             }
 
+            // After stream is completely finished and text is final:
+            // Explicitly set the selection in ChapterEditorState to the end of the final translated text.
+            let finalLength = finalFullText.utf16.count
+            workspace.activeEditorState?.translatedSelection = NSRange(location: finalLength, length: 0)
+
             // Once the stream is finished, save the final result to the in-memory model.
             let translationTime = Date().timeIntervalSince(startTime)
             translationService.updateModelsAfterStreaming(
                 project: project,
                 chapterID: chapter.id,
-                fullText: finalFullText, // Use the potentially cleaned text
+                fullText: finalFullText,
                 prompt: prompt,
                 modelUsed: settings.selectedModel,
                 inputTokens: finalInputTokens,
