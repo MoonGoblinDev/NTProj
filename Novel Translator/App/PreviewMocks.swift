@@ -140,24 +140,31 @@ struct PreviewMocks {
         // --- Create App State Objects ---
         
         // AppContext
-        self.appContext = AppContext()
+                self.appContext = AppContext()
 
-        // ProjectManager
-        let pm = ProjectManager()
-        pm.setCurrentProjectForPreview(self.project)
-        let projectMetadata = ProjectMetadata(id: self.project.id, name: self.project.name, bookmarkData: Data(), lastOpened: Date())
-        let otherProjectMeta = ProjectMetadata(id: UUID(), name: "Another Story", bookmarkData: Data(), lastOpened: Date().addingTimeInterval(-86400))
-        pm.settings.projects = [projectMetadata, otherProjectMeta]
-        pm.settings.selectedProvider = .openai
-        pm.settings.selectedModel = "gpt-4o"
-        // Ensure OpenAI has an enabled model for the preview
-        if let openAIConfigIndex = pm.settings.apiConfigurations.firstIndex(where: { $0.provider == .openai }) {
-            pm.settings.apiConfigurations[openAIConfigIndex].enabledModels = ["gpt-4o", "gpt-3.5-turbo"]
-        }
-        if let presetID = pm.settings.promptPresets.first?.id {
-            pm.settings.selectedPromptPresetID = presetID
-        }
-        self.projectManager = pm
+                // ProjectManager
+                let pm = ProjectManager()
+                pm.setCurrentProjectForPreview(self.project)
+                let projectMetadata = ProjectMetadata(id: self.project.id, name: self.project.name, bookmarkData: Data(), lastOpened: Date())
+                let otherProjectMeta = ProjectMetadata(id: UUID(), name: "Another Story", bookmarkData: Data(), lastOpened: Date().addingTimeInterval(-86400))
+                pm.settings.projects = [projectMetadata, otherProjectMeta]
+                pm.settings.selectedProvider = .openai // Keep a cloud provider as default for previews for now
+                pm.settings.selectedModel = "gpt-4o"
+                
+                // Ensure OpenAI has an enabled model for the preview
+                if let openAIConfigIndex = pm.settings.apiConfigurations.firstIndex(where: { $0.provider == .openai }) {
+                    pm.settings.apiConfigurations[openAIConfigIndex].enabledModels = ["gpt-4o", "gpt-3.5-turbo"]
+                }
+                // Add a mock Ollama config for previews if needed
+                if let ollamaConfigIndex = pm.settings.apiConfigurations.firstIndex(where: { $0.provider == .ollama }) {
+                    pm.settings.apiConfigurations[ollamaConfigIndex].baseURL = "http://localhost:11434" // Example
+                    pm.settings.apiConfigurations[ollamaConfigIndex].enabledModels = ["llama3:latest", "mistral:latest"]
+                }
+
+                if let presetID = pm.settings.promptPresets.first?.id {
+                    pm.settings.selectedPromptPresetID = presetID
+                }
+                self.projectManager = pm
 
         // WorkspaceViewModel
         let wvm = WorkspaceViewModel()

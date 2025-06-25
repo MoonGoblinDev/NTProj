@@ -112,8 +112,8 @@ class AnthropicService: LLMServiceProtocol {
     }
     
     // MARK: - Static Model Fetching
-    static func fetchAvailableModels(apiKey: String) async throws -> [String] {
-        guard !apiKey.isEmpty else { return [] }
+    static func fetchAvailableModels(apiKey: String?, baseURL: String? = nil) async throws -> [String] { // baseURL ignored
+        guard let apiKey = apiKey, !apiKey.isEmpty else { return [] }
         
         let urlString = "https://api.anthropic.com/v1/models"
         let staticHeaders: [String: String] = [

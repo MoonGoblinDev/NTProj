@@ -1,3 +1,4 @@
+// FILE: Novel Translator/Models/AppSettings.swift
 //
 //  AppSettings.swift
 //  Novel Translator
@@ -36,6 +37,10 @@ struct AppSettings: Codable {
             var apiConfig = APIConfiguration(provider: provider)
             // Use a stable identifier format not tied to a project UUID
             apiConfig.apiKeyIdentifier = "com.noveltranslator.apikey.\(provider.rawValue)"
+            // Set default baseURL for Ollama
+            if provider == .ollama {
+                apiConfig.baseURL = "http://localhost:11434"
+            }
             self.apiConfigurations.append(apiConfig)
         }
 

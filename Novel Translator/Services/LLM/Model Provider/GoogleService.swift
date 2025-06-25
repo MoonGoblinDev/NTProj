@@ -130,8 +130,8 @@ class GoogleService: LLMServiceProtocol {
     }
     
     // MARK: - Static Model Fetching
-    static func fetchAvailableModels(apiKey: String) async throws -> [String] {
-        guard !apiKey.isEmpty else { return [] }
+    static func fetchAvailableModels(apiKey: String?, baseURL: String? = nil) async throws -> [String] { // baseURL ignored
+        guard let apiKey = apiKey, !apiKey.isEmpty else { return [] }
         
         let endpoint = "https://generativelanguage.googleapis.com/v1beta/models?key=\(apiKey)"
         
