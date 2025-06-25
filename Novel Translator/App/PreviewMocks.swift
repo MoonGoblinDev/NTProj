@@ -75,7 +75,7 @@ struct PreviewMocks {
         ch3.translatedContent = ""
         ch3.translationStatus = .inProgress
 
-        // ** THIS IS THE FIX **
+        
         // Assign the temporary chapter variables to the struct's properties
         self.chapter1 = ch1
         self.chapter2 = ch2

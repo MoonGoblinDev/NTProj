@@ -39,6 +39,14 @@ class ChapterEditorState {
             .font: NSFont.systemFont(ofSize: 14)])
         self.translatedAttributedText = AttributedString(newText, attributes: container)
         
+        
+        // By updating the selection here, we guarantee that the text and selection
+        // state are always consistent when published. This prevents the race condition
+        // where the selection is set based on old text length.
+        // We let STTextView manage its own cursor and this state update will reflect it.
+        // During streaming, this correctly moves the cursor to the end of the incoming text.
+        // let newLength = newText.utf16.count
+        // self.translatedSelection = NSRange(location: newLength, length: 0)
         // REMOVED: Do not modify self.translatedSelection here.
         // STTextView should manage its own cursor during text appends.
         // Programmatic selection will be handled by the caller (e.g., TranslationViewModel)
@@ -66,7 +74,7 @@ class ChapterEditorState {
             var mutableText = self.translatedAttributedText
             if let swiftRange = Range(range, in: mutableText), !swiftRange.isEmpty {
                 // Get attributes from the run at the location we are about to replace.
-                // *** THIS IS THE FIX ***
+                
                 let run = mutableText.runs[swiftRange.lowerBound]
                 let attributes = run.attributes
                 var replacement = AttributedString(text)
@@ -90,7 +98,7 @@ class ChapterEditorState {
             for result in sortedResults {
                 if let range = Range(result.absoluteMatchRange, in: mutableText), !range.isEmpty {
                     // Create replacement with proper attributes for each occurrence.
-                    // *** THIS IS THE FIX ***
+                    
                     let run = mutableText.runs[range.lowerBound]
                     let attributes = run.attributes
                     var replacement = AttributedString(text)
@@ -107,7 +115,7 @@ class ChapterEditorState {
             for result in sortedResults {
                 if let range = Range(result.absoluteMatchRange, in: mutableText), !range.isEmpty {
                     // Create replacement with proper attributes for each occurrence.
-                    // *** THIS IS THE FIX ***
+                    
                     let run = mutableText.runs[range.lowerBound]
                     let attributes = run.attributes
                     var replacement = AttributedString(text)

@@ -97,8 +97,6 @@ class TranslationViewModel {
                 workspace.activeEditorState?.updateTranslation(newText: finalFullText)
             }
 
-            // After stream is completely finished and text is final:
-            // Explicitly set the selection in ChapterEditorState to the end of the final translated text.
             let finalLength = finalFullText.utf16.count
             workspace.activeEditorState?.translatedSelection = NSRange(location: finalLength, length: 0)
 

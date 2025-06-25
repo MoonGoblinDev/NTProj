@@ -209,7 +209,7 @@ class ChatViewModel {
         var contextString = ""
         var sourceTitles: [String] = []
         
-        // ** THIS IS THE FIX **
+        
         // Correctly sort the chapter UUIDs based on their corresponding chapter number.
         let sortedChapterIDs = focusContext.keys.sorted { uuid1, uuid2 in
             let chap1 = project.chapters.first(where: { $0.id == uuid1 })

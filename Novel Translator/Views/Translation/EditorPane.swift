@@ -58,8 +58,7 @@ struct EditorPane: View {
                 }
             }
             .onChange(of: sourceSelectionFromViewModel) { _, newSelection in
-                // Defer updating local selection to give STTextView time to process text changes first,
-                // which might have occurred in the same update cycle.
+
                 DispatchQueue.main.async {
                     if localSourceSelection != newSelection {
                         localSourceSelection = newSelection
@@ -72,7 +71,7 @@ struct EditorPane: View {
                 }
             }
             .onChange(of: translatedSelectionFromViewModel) { _, newSelection in
-                // Defer updating local selection. This is the key fix for the translation crash.
+
                 DispatchQueue.main.async {
                     if localTranslatedSelection != newSelection {
                         localTranslatedSelection = newSelection

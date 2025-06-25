@@ -142,7 +142,7 @@ class SearchService {
         // 3. For each match, find its line number and content.
         // To do this efficiently, pre-calculate the start-and-end range of each line.
         var lineRanges: [NSRange] = []
-        // *** THIS IS THE FIX ***
+        
         (text as NSString).enumerateSubstrings(in: fullRange, options: .byLines) { (_, substringRange, _, _) in
             lineRanges.append(substringRange)
         }

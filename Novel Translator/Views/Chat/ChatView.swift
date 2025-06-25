@@ -387,7 +387,7 @@ fileprivate struct MessageView: View {
     let mocks = PreviewMocks.shared
     
     
-    // ** THIS IS THE FIX **
+    
     // Encapsulate the VM setup in a closure to satisfy the ViewBuilder.
     let vm: ChatViewModel = {
         let vm = ChatViewModel(
@@ -411,7 +411,7 @@ fileprivate struct MessageView: View {
     let mocks = PreviewMocks.shared
     
     
-    // ** THIS IS THE FIX **
+    
     // Encapsulate the VM setup in a closure to satisfy the ViewBuilder.
     let vm: ChatViewModel = {
         let vm = ChatViewModel(
