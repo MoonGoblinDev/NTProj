@@ -93,7 +93,8 @@ class TranslationViewModel {
             var finalFullText = accumulatedText
             if project.translationConfig.forceLineCountSync {
                 finalFullText = promptBuilder.postprocessLineSync(text: finalFullText)
-                // Update the UI one last time with the cleaned text
+                workspace.activeEditorState?.translatedSelection = NSRange(location: 0, length: 0)
+                await Task.yield()
                 workspace.activeEditorState?.updateTranslation(newText: finalFullText)
             }
 
