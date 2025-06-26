@@ -172,7 +172,7 @@ struct EditorAreaView: View {
                     promptPreviewButton(chapter: chapter)
                     translateButton(chapter: chapter)
                 }
-                .padding()
+                .padding(10)
             }
         }
     }

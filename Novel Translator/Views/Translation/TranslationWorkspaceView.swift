@@ -52,19 +52,6 @@ struct TranslationWorkspaceView: View {
                     projectManager: projectManager,
                     isPresetsViewPresented: $isPresetsViewPresented
                 )
-                
-//                ToolbarItem(placement: .primaryAction) {
-//                    Button {
-//                        withAnimation(.spring()) {
-//                            appContext.isChatSidebarVisible.toggle()
-//                        }
-//                    } label: {
-//                        Label("Toggle Chat", systemImage: "bubble.right")
-//                    }
-//                    .symbolVariant(appContext.isChatSidebarVisible ? .fill : .none)
-//                    .keyboardShortcut("b", modifiers: [.command, .shift])
-//                    .help("Toggle Chat Panel (⌘⇧B)")
-//                }
             }
         }
         
