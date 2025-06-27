@@ -156,7 +156,11 @@ class GlossaryAssistantViewModel {
                 throw LLMServiceError.serviceNotImplemented("No provider configured for this operation.")
             }
             let service = try LLMServiceFactory.create(provider: provider, config: config)
-            let extractedEntries = try await service.extractGlossary(prompt: prompt)
+            
+            // Pass the currently selected model for the glossary extraction task.
+            let modelForGlossary = projectManager.settings.selectedModel
+            
+            let extractedEntries = try await service.extractGlossary(prompt: prompt, model: modelForGlossary)
             processResults(extractedEntries)
         } catch {
             let localizedError = error as? LocalizedError

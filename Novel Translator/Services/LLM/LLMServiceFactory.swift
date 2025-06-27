@@ -38,9 +38,11 @@ class LLMServiceFactory {
             guard let baseURL = config.baseURL, !baseURL.isEmpty else {
                 throw LLMServiceError.invalidURL("Ollama base URL is missing or empty in configuration.")
             }
-            // Ollama doesn't typically use an API key in the same way, so we pass nil or an empty string.
-            // The service itself will handle its specific authentication if any.
             return OllamaService(baseURL: baseURL)
+        case .openrouter:
+            return try OpenRouterService(config: config)
+        case .custom:
+            return try CustomOpenAIService(config: config)
         }
     }
 }

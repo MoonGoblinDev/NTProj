@@ -1,42 +1,63 @@
-// FILE: Novel Translator/Services/LLM/Model Provider/OpenAIService.swift
+// FILE: Novel Translator/Services/LLM/Model Provider/CustomOpenAIService.swift
+//
+//  CustomOpenAIService.swift
+//  Novel Translator
+//
+//  Created by Bregas Satria Wicaksono on 24/06/25.
+//
+
 import Foundation
 import Tiktoken
 
-// Note: The DTOs (Data Transfer Objects) for OpenAI's API are now in the shared file:
+// Note: The DTOs (Data Transfer Objects) for this service are in the shared file:
 // 'Novel Translator/Models/DTOs/OpenAICompatibleDTOs.swift'
 
-// MARK: - OpenAIService Implementation
-class OpenAIService: LLMServiceProtocol {
-    private let apiKey: String
-    private let baseURL = "https://api.openai.com/v1"
+class CustomOpenAIService: LLMServiceProtocol {
+    private let config: APIConfiguration
+    private let apiKey: String?
+    private let baseURL: String
+
     private var headers: [String: String] {
-        ["Authorization": "Bearer \(apiKey)"]
+        if let key = apiKey, !key.isEmpty {
+            return ["Authorization": "Bearer \(key)"]
+        }
+        return [:]
     }
 
-    init(apiKey: String) {
-        self.apiKey = apiKey
+    init(config: APIConfiguration) throws {
+        self.config = config
+        self.apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier) // Can be nil
+
+        guard let baseURL = config.baseURL, !baseURL.isEmpty, let _ = URL(string: baseURL) else {
+            throw LLMServiceError.invalidURL("Custom OpenAI-like base URL is missing or invalid.")
+        }
+        // Ensure base URL doesn't have a trailing slash for clean path appending.
+        self.baseURL = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
     }
     
-    // MARK: - Static Model Fetching
-    static func fetchAvailableModels(apiKey: String?, baseURL: String? = nil) async throws -> [String] { // baseURL ignored
-        guard let apiKey = apiKey, !apiKey.isEmpty else { return [] }
+    static func fetchAvailableModels(apiKey: String?, baseURL: String?) async throws -> [String] {
+        guard let baseURL = baseURL, !baseURL.isEmpty, let url = URL(string: baseURL) else {
+            throw LLMServiceError.invalidURL("Base URL for fetching models is invalid.")
+        }
         
-        let endpoint = "https://api.openai.com/v1/models"
-        let headers = ["Authorization": "Bearer \(apiKey)"]
+        let endpoint = url.appendingPathComponent("v1/models").absoluteString
+        var headers: [String: String] = [:]
+        if let apiKey = apiKey, !apiKey.isEmpty {
+            headers["Authorization"] = "Bearer \(apiKey)"
+        }
         
         let decodedResponse: OpenAIModelsListResponse = try await LLMServiceHelper.performGETRequest(urlString: endpoint, headers: headers)
         
         let filteredModels = decodedResponse.data
-            .filter { $0.id.hasPrefix("gpt-") && !$0.id.contains("vision") }
+            .filter { !$0.id.contains("vision") }
             .map { $0.id }
             .sorted()
-        
+            
         return filteredModels
     }
 
-    // MARK: - Non-Streaming Translation
     func translate(request: TranslationRequest) async throws -> TranslationResponse {
-        let urlString = "\(baseURL)/chat/completions"
+        let urlString = "\(baseURL)/v1/chat/completions"
         let payload = OpenAIRequestPayload(
             model: request.model,
             messages: [OpenAIMessage(role: "user", content: request.prompt)],
@@ -65,12 +86,11 @@ class OpenAIService: LLMServiceProtocol {
         )
     }
     
-    // MARK: - Streaming Translation
     func streamTranslate(request: TranslationRequest) -> AsyncThrowingStream<StreamingTranslationChunk, Error> {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let urlString = "\(baseURL)/chat/completions"
+                    let urlString = "\(baseURL)/v1/chat/completions"
                     let payload = OpenAIRequestPayload(
                         model: request.model,
                         messages: [OpenAIMessage(role: "user", content: request.prompt)],
@@ -89,33 +109,19 @@ class OpenAIService: LLMServiceProtocol {
                     for try await line in bytes.lines {
                         if line.hasPrefix("data: ") {
                             let jsonString = line.dropFirst(6)
-                            
-                            if jsonString == "[DONE]" {
-                                continuation.finish()
-                                return
-                            }
+                            if jsonString == "[DONE]" { continuation.finish(); return }
                             
                             guard let jsonData = jsonString.data(using: .utf8) else { continue }
+                            let decodedChunk = try JSONDecoder().decode(OpenAIStreamChunk.self, from: jsonData)
+                            let choice = decodedChunk.choices.first
+                            
+                            let chunk = StreamingTranslationChunk(
+                                textChunk: choice?.delta.content ?? "",
+                                inputTokens: nil, outputTokens: nil, finishReason: choice?.finish_reason
+                            )
+                            continuation.yield(chunk)
 
-                            do {
-                                let decodedChunk = try JSONDecoder().decode(OpenAIStreamChunk.self, from: jsonData)
-                                let choice = decodedChunk.choices.first
-                                
-                                let chunk = StreamingTranslationChunk(
-                                    textChunk: choice?.delta.content ?? "",
-                                    inputTokens: nil,
-                                    outputTokens: nil,
-                                    finishReason: choice?.finish_reason
-                                )
-                                continuation.yield(chunk)
-
-                                if chunk.isFinal {
-                                    continuation.finish()
-                                    return
-                                }
-                            } catch {
-                                print("OpenAI stream decoding error on a chunk: \(error)")
-                            }
+                            if chunk.isFinal { continuation.finish(); return }
                         }
                     }
                     continuation.finish()
@@ -126,12 +132,10 @@ class OpenAIService: LLMServiceProtocol {
         }
     }
     
-    // MARK: - Glossary Extraction
     func extractGlossary(prompt: String, model: String) async throws -> [GlossaryEntry] {
-        let urlString = "\(baseURL)/chat/completions"
-        let modelToUse = model.isEmpty ? "gpt-4o" : model
+        let urlString = "\(baseURL)/v1/chat/completions"
         let payload = OpenAIRequestPayload(
-            model: modelToUse,
+            model: model,
             messages: [OpenAIMessage(role: "user", content: prompt)],
             temperature: 0.1,
             max_tokens: nil,
@@ -145,29 +149,17 @@ class OpenAIService: LLMServiceProtocol {
             headers: headers
         )
         
-        guard let jsonText = decodedResponse.choices.first?.message.content else {
-            return []
-        }
-        
+        guard let jsonText = decodedResponse.choices.first?.message.content else { return [] }
         guard let jsonData = jsonText.data(using: .utf8) else {
             throw LLMServiceError.responseDecodingFailed(URLError(.cannotDecodeContentData))
         }
 
-        do {
-            let wrapper = try JSONDecoder().decode(GlossaryResponseWrapper.self, from: jsonData)
-            return wrapper.entries
-        } catch {
-            throw LLMServiceError.responseDecodingFailed(error)
-        }
+        let wrapper = try JSONDecoder().decode(GlossaryResponseWrapper.self, from: jsonData)
+        return wrapper.entries
     }
 
-    // MARK: - Token Counting
     func countTokens(text: String, model: String) async throws -> Int {
-        do {
-            let count = try await getTokenCount(for: text, model: model)
-            return count
-        } catch {
-            throw LLMServiceError.serviceNotImplemented("Token counting failed via Tiktoken: \(error.localizedDescription)")
-        }
+        // Use Tiktoken with a generic model as the best-effort estimate.
+        try await getTokenCount(for: text, model: "gpt-4")
     }
 }

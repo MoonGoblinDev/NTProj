@@ -250,11 +250,13 @@ class GoogleService: LLMServiceProtocol {
     }
     
     // MARK: - Glossary Extraction
-    func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
+    func extractGlossary(prompt: String, model: String) async throws -> [GlossaryEntry] {
         guard !apiKey.isEmpty else { throw LLMServiceError.apiKeyMissing("Google") }
         
-        let model = "gemini-1.5-flash-latest"
-        let urlString = "\(baseURL)/\(model):generateContent?key=\(apiKey)"
+        // Gemini's controlled-schema JSON output works best with specific models.
+        // We will ignore the user's selected model for this specific feature and use one known to work well.
+        let modelToUse = "gemini-1.5-flash-latest"
+        let urlString = "\(baseURL)/\(modelToUse):generateContent?key=\(apiKey)"
         
         let schema = GeminiGlossaryRequestPayload.Schema(
             items: .init(

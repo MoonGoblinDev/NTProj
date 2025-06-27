@@ -43,7 +43,7 @@ class TokenCounterViewModel {
         guard let provider = settings.selectedProvider else { return }
 
         switch provider {
-        case .openai, .deepseek, .ollama: // Ollama uses TikToken locally
+        case .openai, .deepseek, .ollama, .openrouter, .custom: // Group all local/estimated counters
             // For local counters, "retry" just recalculates.
             Task { await self.updateCount(for: textToCount) }
         case .google, .anthropic:
@@ -88,8 +88,8 @@ class TokenCounterViewModel {
                 self.isRealCount = false
             }
 
-        case .deepseek, .ollama: // Ollama also uses TikToken for estimation
-            // For Deepseek/Ollama, Tiktoken is an estimate, but it's the best we can do locally.
+        case .deepseek, .ollama, .openrouter, .custom: // Group all providers estimated with TikToken
+            // For these, Tiktoken is an estimate, but it's the best we can do locally.
             do {
                 // Use a default gpt-4 model for encoding as it's compatible
                 self.tokenCount = try await countWithTiktoken(text: text, model: "gpt-4")

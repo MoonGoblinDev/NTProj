@@ -15,15 +15,13 @@ struct APISettingsView: View {
                 List(APIConfiguration.APIProvider.allCases, selection: $selectedProvider) { provider in
                     Text(provider.displayName).tag(provider)
                 }
-                .navigationTitle("")
+                .navigationTitle("Providers")
             } detail: {
-                // The router view decides which specific settings view to display.
                 ProviderSettingsRouter(
                     provider: selectedProvider,
                     projectManager: projectManager
                 )
             }
-            .navigationTitle("")
             .navigationSplitViewStyle(.balanced)
             
             Divider()
@@ -37,17 +35,15 @@ struct APISettingsView: View {
             }
             .padding()
         }
-        .frame(minWidth: 600, idealWidth: 750, minHeight: 450, idealHeight: 550)
+        .frame(minWidth: 700, idealWidth: 850, minHeight: 500, idealHeight: 600)
         .onAppear {
             selectedProvider = projectManager.settings.selectedProvider ?? .google
         }
     }
     
     private func saveAndDismiss() {
-        // Ensure the selected model is valid
         if let currentConfig = projectManager.settings.apiConfigurations.first(where: { $0.provider == projectManager.settings.selectedProvider }),
            !currentConfig.enabledModels.contains(projectManager.settings.selectedModel) {
-            // If the currently selected model was just disabled, pick another enabled one.
             projectManager.settings.selectedModel = currentConfig.enabledModels.first ?? ""
         }
         
@@ -57,8 +53,6 @@ struct APISettingsView: View {
 }
 
 // MARK: - Router View
-/// This view is the key to fixing the update bug. It switches between the specific
-/// provider setting views, forcing SwiftUI to create a new view instance on selection change.
 fileprivate struct ProviderSettingsRouter: View {
     let provider: APIConfiguration.APIProvider
     @ObservedObject var projectManager: ProjectManager
@@ -76,8 +70,12 @@ fileprivate struct ProviderSettingsRouter: View {
                 AnthropicSettingsView(config: configBinding)
             case .deepseek:
                 DeepseekSettingsView(config: configBinding)
-            case .ollama: // New case
+            case .ollama:
                 OllamaSettingsView(config: configBinding)
+            case .openrouter:
+                OpenRouterSettingsView(config: configBinding)
+            case .custom:
+                CustomOpenAISettingsView(config: configBinding)
             }
         } else {
             ContentUnavailableView("Configuration Not Found", systemImage: "xmark.circle")
@@ -86,70 +84,91 @@ fileprivate struct ProviderSettingsRouter: View {
 }
 
 
-// MARK: - Base View for Shared Logic
-/// A base view that contains the common UI and logic for fetching and displaying models.
-/// This avoids code duplication in the specific provider views.
+// MARK: - Base View for Shared Logic (Refactored for Search and Sections)
 fileprivate struct ProviderSettingsBaseView<Content: View>: View {
     let title: String
     @Binding var config: APIConfiguration
-    // Modified fetcher to accept apiKey and optional baseURL
     let fetcher: (_ apiKey: String?, _ baseURL: String?) async throws -> [String]
+    let showAPIKeyField: Bool
+    let showBaseURLField: Bool
     
-    @State private var apiKey: String = "" // Still relevant for cloud providers
-    @State private var baseURLInput: String = "" // For Ollama's baseURL
-    @State private var availableModels: [String] = []
+    // State for fetching and filtering models
+    @State private var apiKey: String = ""
+    @State private var baseURLInput: String = ""
+    @State private var allFetchedModels: [String] = []
     @State private var isLoadingModels = false
     @State private var modelLoadingError: String?
-    
-    // Optional additional content for provider-specific settings
+    @State private var modelSearchQuery: String = ""
+
     @ViewBuilder let additionalContent: Content
 
-    init(title: String, config: Binding<APIConfiguration>, fetcher: @escaping (_ apiKey: String?, _ baseURL: String?) async throws -> [String], @ViewBuilder additionalContent: () -> Content = { EmptyView() }) {
+    init(title: String, config: Binding<APIConfiguration>, fetcher: @escaping (_ apiKey: String?, _ baseURL: String?) async throws -> [String], showAPIKeyField: Bool, showBaseURLField: Bool, @ViewBuilder additionalContent: () -> Content = { EmptyView() }) {
         self.title = title
         self._config = config
         self.fetcher = fetcher
+        self.showAPIKeyField = showAPIKeyField
+        self.showBaseURLField = showBaseURLField
         self.additionalContent = additionalContent()
     }
-
+    
+    // MARK: Computed Properties for Filtered Lists
+    
+    private var filteredEnabledModels: [String] {
+        let enabled = config.enabledModels
+        if modelSearchQuery.isEmpty {
+            return enabled.sorted()
+        }
+        return enabled.filter { $0.localizedCaseInsensitiveContains(modelSearchQuery) }.sorted()
+    }
+    
+    private var filteredAvailableModels: [String] {
+        let enabledSet = Set(config.enabledModels)
+        let available = allFetchedModels.filter { !enabledSet.contains($0) }
+        
+        if modelSearchQuery.isEmpty {
+            return available.sorted()
+        }
+        return available.filter { $0.localizedCaseInsensitiveContains(modelSearchQuery) }.sorted()
+    }
+    
+    // MARK: Body
     var body: some View {
         Form {
-            // API Key section, relevant for cloud providers
-            if config.provider != .ollama {
-                Section("API Key") {
+            // API Key and Base URL sections
+            if showAPIKeyField {
+                Section(header: Text("API Key")) {
                     SecureField("Stored in Keychain", text: $apiKey)
-                        .onChange(of: apiKey) { _, newValue in
-                            KeychainHelper.save(key: config.apiKeyIdentifier, stringValue: newValue)
-                        }
+                        .onChange(of: apiKey) { _, newValue in KeychainHelper.save(key: config.apiKeyIdentifier, stringValue: newValue) }
                 }
-            } else { // Base URL section for Ollama
-                Section("Ollama Server") {
-                    TextField("Base URL (e.g., http://localhost:11434)", text: $baseURLInput)
-                        .onChange(of: baseURLInput) { _, newValue in
-                            config.baseURL = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                        }
+            }
+            if showBaseURLField {
+                Section(header: Text(config.provider == .ollama ? "Ollama Server URL" : "Endpoint Base URL")) {
+                    TextField("e.g., http://localhost:11434", text: $baseURLInput)
+                        .onChange(of: baseURLInput) { _, newValue in config.baseURL = newValue.trimmingCharacters(in: .whitespacesAndNewlines) }
                 }
             }
             
-            Button("Fetch Available Models") {
-                Task { await loadModels() }
-            }
-            // Disable if API key is missing (for cloud) or baseURL is missing (for Ollama)
-            .disabled( (config.provider != .ollama && apiKey.isEmpty) || (config.provider == .ollama && (config.baseURL?.isEmpty ?? true)) )
+            // Fetch button
+            Button("Fetch Available Models") { Task { await loadModels() } }
+                .disabled(isFetchDisabled())
 
-            // Allow for provider-specific form sections
+            // Provider-specific additional content
             additionalContent
             
-            Section("Enabled Models for Translation") {
+            // Model management section
+            Section("Models for Translation") {
+                TextField("Search Models...", text: $modelSearchQuery)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.vertical, 4)
+
                 if isLoadingModels {
                     HStack { ProgressView(); Text("Loading models...") }
                 } else if let error = modelLoadingError {
                     Text(error).foregroundColor(.red)
-                } else if availableModels.isEmpty {
-                    Text(config.provider == .ollama ? "No models available. Ensure Ollama server is running and accessible at the specified URL, then fetch." : "No models available. Fetch them using your API key.").foregroundStyle(.secondary)
+                } else if allFetchedModels.isEmpty && modelSearchQuery.isEmpty {
+                    Text("No models available. Ensure configuration is correct and press 'Fetch' again.").foregroundStyle(.secondary)
                 } else {
-                    List(availableModels, id: \.self) { modelName in
-                        Toggle(modelName, isOn: bindingFor(model: modelName))
-                    }
+                    modelLists
                 }
             }
         }
@@ -157,40 +176,56 @@ fileprivate struct ProviderSettingsBaseView<Content: View>: View {
         .navigationTitle(title)
         .onAppear(perform: loadInitialData)
     }
+    
+    // MARK: Model List Subview
+    @ViewBuilder
+    private var modelLists: some View {
+        // Enabled Models Section
+        if !filteredEnabledModels.isEmpty {
+            Section {
+                ForEach(filteredEnabledModels, id: \.self) { modelName in
+                    Toggle(modelName, isOn: bindingFor(model: modelName))
+                }
+            } header: { Text("Enabled").padding(.top) }
+        }
+        
+        // Available Models Section
+        if !filteredAvailableModels.isEmpty {
+            Section {
+                ForEach(filteredAvailableModels, id: \.self) { modelName in
+                    Toggle(modelName, isOn: bindingFor(model: modelName))
+                }
+            } header: { Text("Available").padding(.top) }
+        }
+        
+        // "No results" message for search
+        if modelSearchQuery.isEmpty == false && filteredEnabledModels.isEmpty && filteredAvailableModels.isEmpty {
+            ContentUnavailableView.search(text: modelSearchQuery)
+        }
+    }
 
+    // MARK: Helper Methods
     private func loadInitialData() {
         self.apiKey = KeychainHelper.loadString(key: config.apiKeyIdentifier) ?? ""
         self.baseURLInput = config.baseURL ?? (config.provider == .ollama ? "http://localhost:11434" : "")
         
-        // Auto-fetch if data is present
-        if config.provider == .ollama {
-            if !(config.baseURL?.isEmpty ?? true) { Task { await loadModels() } }
-        } else {
-            if !apiKey.isEmpty { Task { await loadModels() } }
-        }
+        if !isFetchDisabled() { Task { await loadModels() } }
     }
     
     private func loadModels() async {
-        if config.provider == .ollama {
-            guard let currentBaseURL = config.baseURL, !currentBaseURL.isEmpty else {
-                self.availableModels = []; self.modelLoadingError = "Ollama Base URL is required."
-                return
-            }
-        } else {
-            guard !apiKey.isEmpty else {
-                self.availableModels = []; self.modelLoadingError = "API Key is required."
-                return
-            }
-        }
-
         isLoadingModels = true; modelLoadingError = nil
         do {
-            // Pass both apiKey and baseURL to the fetcher. The fetcher for a specific provider will use what it needs.
-            self.availableModels = try await fetcher(apiKey, config.baseURL)
+            self.allFetchedModels = try await fetcher(apiKey, config.baseURL)
         } catch {
-            self.availableModels = []; self.modelLoadingError = error.localizedDescription
+            self.allFetchedModels = []; self.modelLoadingError = error.localizedDescription
         }
         isLoadingModels = false
+    }
+
+    private func isFetchDisabled() -> Bool {
+        let keyMissing = showAPIKeyField && apiKey.isEmpty
+        let urlMissing = showBaseURLField && (config.baseURL?.isEmpty ?? true)
+        return keyMissing || urlMissing
     }
 
     private func bindingFor(model modelName: String) -> Binding<Bool> {
@@ -199,7 +234,7 @@ fileprivate struct ProviderSettingsBaseView<Content: View>: View {
             set: { isEnabled in
                 if isEnabled {
                     if !config.enabledModels.contains(modelName) {
-                        config.enabledModels.append(modelName); config.enabledModels.sort()
+                        config.enabledModels.append(modelName)
                     }
                 } else {
                     config.enabledModels.removeAll { $0 == modelName }
@@ -209,87 +244,73 @@ fileprivate struct ProviderSettingsBaseView<Content: View>: View {
     }
 }
 
-// MARK: - Provider-Specific Views
+// MARK: - Provider-Specific Views (Unchanged)
 
 fileprivate struct GeminiSettingsView: View {
     @Binding var config: APIConfiguration
     var body: some View {
-        ProviderSettingsBaseView(
-            title: "Google (Gemini) Settings",
-            config: $config,
-            fetcher: GoogleService.fetchAvailableModels // Signature now (String?, String?) -> [String]
-        )
+        ProviderSettingsBaseView(title: "Google (Gemini) Settings", config: $config, fetcher: GoogleService.fetchAvailableModels, showAPIKeyField: true, showBaseURLField: false)
     }
 }
 
 fileprivate struct OpenAISettingsView: View {
     @Binding var config: APIConfiguration
     var body: some View {
-        ProviderSettingsBaseView(
-            title: "OpenAI Settings",
-            config: $config,
-            fetcher: OpenAIService.fetchAvailableModels
-        )
+        ProviderSettingsBaseView(title: "OpenAI Settings", config: $config, fetcher: OpenAIService.fetchAvailableModels, showAPIKeyField: true, showBaseURLField: false)
     }
 }
 
 fileprivate struct AnthropicSettingsView: View {
     @Binding var config: APIConfiguration
-
     var body: some View {
-        ProviderSettingsBaseView(
-            title: "Anthropic (Claude) Settings",
-            config: $config,
-            fetcher: AnthropicService.fetchAvailableModels
-        )
+        ProviderSettingsBaseView(title: "Anthropic (Claude) Settings", config: $config, fetcher: AnthropicService.fetchAvailableModels, showAPIKeyField: true, showBaseURLField: false)
     }
 }
 
 fileprivate struct DeepseekSettingsView: View {
     @Binding var config: APIConfiguration
-
     var body: some View {
-        ProviderSettingsBaseView(
-            title: "Deepseek Settings",
-            config: $config,
-            fetcher: DeepseekService.fetchAvailableModels
-        )
+        ProviderSettingsBaseView(title: "Deepseek Settings", config: $config, fetcher: DeepseekService.fetchAvailableModels, showAPIKeyField: true, showBaseURLField: false)
     }
 }
 
-// New Ollama Settings View
 fileprivate struct OllamaSettingsView: View {
     @Binding var config: APIConfiguration
     var body: some View {
-        ProviderSettingsBaseView(
-            title: "Ollama (Local) Settings",
-            config: $config,
-            fetcher: OllamaService.fetchAvailableModels // This fetcher will use baseURL
-        )
-        // No additional content needed for Ollama specific settings beyond base URL handled by ProviderSettingsBaseView
+        ProviderSettingsBaseView(title: "Ollama (Local) Settings", config: $config, fetcher: OllamaService.fetchAvailableModels, showAPIKeyField: false, showBaseURLField: true)
     }
 }
 
-// Update static fetchAvailableModels signatures in provider services
-// GoogleService.swift
-// static func fetchAvailableModels(apiKey: String?, baseURL: String? = nil) async throws -> [String] {
-//     guard let apiKey = apiKey, !apiKey.isEmpty else { return [] } ...
+fileprivate struct OpenRouterSettingsView: View {
+    @Binding var config: APIConfiguration
+    var body: some View {
+        ProviderSettingsBaseView(title: "OpenRouter Settings", config: $config, fetcher: OpenRouterService.fetchAvailableModels, showAPIKeyField: true, showBaseURLField: false) {
+            Section("Optional Headers") {
+                TextField("Site URL (HTTP-Referer)", text: Binding(get: { config.openRouterSiteURL ?? "" }, set: { config.openRouterSiteURL = $0 }))
+                TextField("App Name (X-Title)", text: Binding(get: { config.openRouterAppName ?? "" }, set: { config.openRouterAppName = $0 }))
+            }
+        }
+    }
+}
 
-// OpenAIService.swift
-// static func fetchAvailableModels(apiKey: String?, baseURL: String? = nil) async throws -> [String] {
-//     guard let apiKey = apiKey, !apiKey.isEmpty else { return [] } ...
-
-// AnthropicService.swift
-// static func fetchAvailableModels(apiKey: String?, baseURL: String? = nil) async throws -> [String] {
-//     guard let apiKey = apiKey, !apiKey.isEmpty else { return [] } ...
-
-// DeepseekService.swift
-// static func fetchAvailableModels(apiKey: String?, baseURL: String? = nil) async throws -> [String] {
-//     guard let apiKey = apiKey, !apiKey.isEmpty else { return [] } ...
-
-// (OllamaService.fetchAvailableModels already has the correct signature)
+fileprivate struct CustomOpenAISettingsView: View {
+    @Binding var config: APIConfiguration
+    var body: some View {
+        ProviderSettingsBaseView(title: "Custom OpenAI-like Settings", config: $config, fetcher: CustomOpenAIService.fetchAvailableModels, showAPIKeyField: true, showBaseURLField: true) {
+            Section("Notes") {
+                Text("Use this for any OpenAI-compatible endpoint, like a local LLM server (e.g., LM Studio, Jan) or another proxy service. The API key may be optional depending on your setup.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
 
 #Preview {
     let mocks = PreviewMocks.shared
+    // Let's ensure the preview has some models to show off the new UI
+    if let idx = mocks.projectManager.settings.apiConfigurations.firstIndex(where: { $0.provider == .openai }) {
+        mocks.projectManager.settings.apiConfigurations[idx].enabledModels = ["gpt-4o", "gpt-4o-mini"]
+    }
     return APISettingsView(projectManager: mocks.projectManager)
 }

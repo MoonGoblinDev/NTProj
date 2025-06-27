@@ -223,11 +223,13 @@ class AnthropicService: LLMServiceProtocol {
     }
     
     // MARK: - Glossary Extraction
-    func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
+    func extractGlossary(prompt: String, model: String) async throws -> [GlossaryEntry] {
+        // Use a powerful model known for good JSON output, but accept the user's choice.
+        let modelToUse = model.isEmpty ? "claude-3-5-sonnet-20240620" : model
         let request = TranslationRequest(
             prompt: prompt,
-            configuration: .init(provider: .anthropic),
-            model: "claude-3-5-sonnet-20240620"
+            configuration: .init(provider: .anthropic), // A dummy config is fine here
+            model: modelToUse
         )
         
         let response = try await self.translate(request: request)

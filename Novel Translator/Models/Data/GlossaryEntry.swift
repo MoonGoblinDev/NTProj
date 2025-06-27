@@ -20,6 +20,15 @@ struct GlossaryEntry: Codable, Identifiable, Hashable {
         var displayName: String {
             self.rawValue.capitalized
         }
+        
+        var genderColor: Color {
+            switch self {
+            case .male: return Color.blue
+            case .female: return Color.red
+            case .other: return Color.purple
+            case .unknown: return Color.indigo
+            }
+        }
     }
     
     enum GlossaryCategory: String, CaseIterable, Codable {

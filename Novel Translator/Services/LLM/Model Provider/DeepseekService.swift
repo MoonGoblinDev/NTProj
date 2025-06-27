@@ -194,10 +194,11 @@ class DeepseekService: LLMServiceProtocol {
     }
     
     // MARK: - Glossary Extraction
-    func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
+    func extractGlossary(prompt: String, model: String) async throws -> [GlossaryEntry] {
         let urlString = "\(baseURL)/chat/completions"
+        let modelToUse = model.isEmpty ? "deepseek-chat" : model
         let payload = DeepseekRequestPayload(
-            model: "deepseek-chat",
+            model: modelToUse,
             messages: [DeepseekMessage(role: "user", content: prompt)],
             temperature: 0.1,
             max_tokens: nil,

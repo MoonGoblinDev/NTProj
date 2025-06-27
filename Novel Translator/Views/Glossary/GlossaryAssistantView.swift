@@ -168,18 +168,35 @@ struct GlossaryAssistantView: View {
     private var resultsList: some View {
         List($viewModel.selectableEntries) { $item in
             HStack(alignment: .top, spacing: 12) {
-                Toggle("", isOn: $item.isSelected).labelsHidden().padding(.top, 6)
+                VStack{
+                    Spacer()
+                    Toggle("", isOn: $item.isSelected).labelsHidden().padding(.top, 6)
+                    Spacer()
+                }
+                
                 VStack(spacing: 8) {
-                    HStack {
-                        TextField("Original Term", text: $item.entry.originalTerm).fontWeight(.semibold)
-                        Text("->").foregroundStyle(.secondary)
-                        TextField("Translation", text: $item.entry.translation)
-                    }
-                    
                     HStack(spacing: 15) {
                         Picker("Category", selection: $item.entry.category) {
-                            ForEach(GlossaryEntry.GlossaryCategory.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                            ForEach(GlossaryEntry.GlossaryCategory.allCases, id: \.self) {
+                                Text($0.displayName).tag($0)
+                            }
                         }
+                        .pickerStyle(.menu)
+                        .background(item.entry.category.highlightColor.opacity(0.4))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .frame(width: 100)
+                        
+                        // Add custom arrow indicator
+                        .background(
+                            HStack {
+                                Spacer()
+                                Image(systemName: "chevron.down")
+                                    .foregroundColor(.primary)
+                                    .font(.caption)
+                                    .padding(.trailing, 8)
+                            }
+                        )
+                        
                         .onChange(of: item.entry.category) { _, newCategory in
                             if newCategory != .character {
                                 item.entry.gender = nil
@@ -190,21 +207,46 @@ struct GlossaryAssistantView: View {
                         
                         if item.entry.category == .character {
                             Picker("Gender", selection: Binding(get: { item.entry.gender ?? .unknown }, set: { item.entry.gender = $0 })) {
-                                ForEach(GlossaryEntry.Gender.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                                ForEach(GlossaryEntry.Gender.allCases, id: \.self) {
+                                    Text($0.displayName).tag($0)
+                                }
                             }
+                            .pickerStyle(.menu)
+                            .background(item.entry.gender?.genderColor.opacity(0.4))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .frame(width: 100)
+                            .background(
+                                HStack {
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
+                                        .foregroundColor(.primary)
+                                        .font(.caption)
+                                        .padding(.trailing, 8)
+                                }
+                            )
+                            Spacer()
+                        } else {
+                            Spacer()
                         }
-                        Spacer()
                     }
-                    .pickerStyle(.segmented)
+                    .buttonStyle(.bordered)
+                    .menuIndicator(.hidden)
                     .labelsHidden()
                     
+                    HStack {
+                        TextField("Original Term", text: $item.entry.originalTerm).fontWeight(.semibold)
+                            .textFieldStyle(.roundedBorder)
+                        Text("->").foregroundStyle(.secondary)
+                        TextField("Translation", text: $item.entry.translation)
+                            .textFieldStyle(.roundedBorder)
+                    }
                     TextField("Context Description", text: $item.entry.contextDescription, axis: .vertical)
                         .lineLimit(1...3)
                         .textFieldStyle(.roundedBorder)
                 }
                 .textFieldStyle(.plain)
             }
-            .padding(.vertical, 8)
+            .padding()
         }
         .listStyle(.inset)
     }

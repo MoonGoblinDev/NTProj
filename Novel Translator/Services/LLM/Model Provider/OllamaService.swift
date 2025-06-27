@@ -196,16 +196,15 @@ class OllamaService: LLMServiceProtocol {
     }
     
     // MARK: - Glossary Extraction
-    func extractGlossary(prompt: String) async throws -> [GlossaryEntry] {
+    func extractGlossary(prompt: String, model: String) async throws -> [GlossaryEntry] {
         let urlString = "\(baseURL)/api/chat"
-        // Use a model known for good JSON output if possible, or let user pick.
-        // For now, assume the selected model can handle it.
+        let modelToUse = model.isEmpty ? "llama3" : model
         let payload = OllamaChatRequestPayload(
-            model: "llama3", // Or a user-selected model capable of JSON output
+            model: modelToUse,
             messages: [OllamaChatMessage(role: "user", content: prompt)],
             stream: false,
             format: "json", // Request JSON output
-            options: .init(temperature: 0.1, num_predict: nil) // Max tokens might be needed depending on glossary size
+            options: .init(temperature: 0.1, num_predict: nil)
         )
 
         let decodedResponse: OllamaChatResponsePayload = try await LLMServiceHelper.performRequest(
@@ -234,11 +233,8 @@ class OllamaService: LLMServiceProtocol {
 
     // MARK: - Token Counting
     func countTokens(text: String, model: String) async throws -> Int {
-        // Ollama doesn't have a direct token counting API.
-        // Use Tiktoken with a generic, widely compatible encoder (e.g., for gpt-4) as an estimate.
-        // The actual tokenization might differ slightly based on the specific Ollama model.
         do {
-            let count = try await getTokenCount(for: text, model: "gpt-4") // Using gpt-4's encoder as a proxy
+            let count = try await getTokenCount(for: text, model: "gpt-4")
             return count
         } catch {
             throw LLMServiceError.serviceNotImplemented("Token counting failed via Tiktoken for Ollama: \(error.localizedDescription)")
