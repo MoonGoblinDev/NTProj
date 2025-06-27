@@ -1,3 +1,5 @@
+// FILE: Novel Translator/Views/Translation/EditorAreaView.swift
+
 import SwiftUI
 
 struct EditorAreaView: View {
@@ -25,6 +27,7 @@ struct EditorAreaView: View {
     @State private var isEditorSearchActive = false
     @State private var isConfigPopoverShown = false
     @State private var isGlossaryAssistantPresented = false // Changed name
+    @State private var isHoveringOnTranslateButton = false
     
     // New state for the popover-like view
     struct GlossaryInfo: Identifiable {
@@ -223,32 +226,51 @@ struct EditorAreaView: View {
     }
     
     private func translateButton(chapter: Chapter) -> some View {
-        
         Button(action: {
-            Task {
-                await translationViewModel.streamTranslateChapter(project: project, chapter: chapter, settings: projectManager.settings, workspace: workspaceViewModel)
+            if translationViewModel.isTranslating {
+                // If it's translating, the action is to cancel.
+                translationViewModel.cancelTranslation()
+            } else {
+                // Otherwise, start the translation.
+                // The view model function is no longer async.
+                translationViewModel.streamTranslateChapter(
+                    project: project,
+                    chapter: chapter,
+                    settings: projectManager.settings,
+                    workspace: workspaceViewModel
+                )
             }
         }) {
-            if !translationViewModel.isTranslating {
+            if translationViewModel.isTranslating {
+                if isHoveringOnTranslateButton {
+                    Label("Stop translating!", systemImage: "stop.fill")
+                } else {
+                    HStack {
+                        ProgressView()
+                            .frame(width: 10, height: 10)
+                            .scaleEffect(0.4)
+                        Text("Translating...")
+                    }
+                }
+            } else {
                 Label("Translate", systemImage: "sparkles")
             }
-            else {
-                HStack{
-                    ProgressView()
-                        .frame(width: 10, height: 10)
-                        .scaleEffect(0.4)
-                    Text("Translating...")
-                }
-            }
-            
         }
-            
         .buttonStyle(.borderedProminent)
-        .disabled(isSourceTextEmpty || translationViewModel.isTranslating)
+        .tint(translationViewModel.isTranslating && isHoveringOnTranslateButton ? .red : .accentColor)
+        // The button should only be disabled if we are *not* currently translating AND the source text is empty.
+        .disabled(!translationViewModel.isTranslating && isSourceTextEmpty)
         .onHover { isHovering in
-            if isHovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+            withAnimation(.easeInOut(duration: 0.1)) {
+                self.isHoveringOnTranslateButton = isHovering
+            }
+            // If it's a clickable button, show the pointing hand.
+            if (!translationViewModel.isTranslating && !isSourceTextEmpty) || translationViewModel.isTranslating {
+                 NSCursor.pointingHand.set()
+            } else {
+                 NSCursor.arrow.set()
+            }
         }
-        
     }
     // MARK: - Highlighting & Search Logic
 
@@ -456,25 +478,4 @@ struct EditorAreaView: View {
             }
         }
     }
-}
-
-#Preview("Editor Area") {
-    let mocks = PreviewMocks.shared
-    return mocks.provide(to: EditorAreaView(
-        project: mocks.project,
-        translationViewModel: mocks.translationViewModel,
-        onShowPromptPreview: {}
-    ))
-}
-
-#Preview("Editor No Chapter") {
-    let mocks = PreviewMocks.shared
-    // Set active chapter to nil to see the placeholder
-    mocks.workspaceViewModel.activeChapterID = nil
-    
-    return mocks.provide(to: EditorAreaView(
-        project: mocks.project,
-        translationViewModel: mocks.translationViewModel,
-        onShowPromptPreview: {}
-    ))
 }
