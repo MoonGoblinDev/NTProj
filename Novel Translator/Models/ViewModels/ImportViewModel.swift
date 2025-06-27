@@ -40,8 +40,9 @@ class ImportViewModel {
                 
                 let settings = project.importSettings
                 
-                // Step 3: Use ChapterDetector to get Chapter objects
-                let detectedChapters = chapterDetector.detect(from: content, using: settings, filename: url.deletingPathExtension().lastPathComponent)
+                // Step 3: Use ChapterDetector to get Chapter objects, passing the filename
+                let filenameWithoutExtension = url.deletingPathExtension().lastPathComponent
+                let detectedChapters = chapterDetector.detect(from: content, using: settings, filename: filenameWithoutExtension)
                 
                 allDetectedChapters.append(contentsOf: detectedChapters)
                 

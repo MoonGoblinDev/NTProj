@@ -7,11 +7,20 @@ struct GlossaryEntry: Codable, Identifiable, Hashable {
     var translation: String
     var category: GlossaryCategory
     var contextDescription: String
+    var gender: Gender? // New property for character gender
     var usageCount: Int = 0
     var isActive: Bool = true
     var createdDate: Date = Date()
     var lastUsedDate: Date?
     var aliases: [String] // Alternative spellings or forms
+    
+    enum Gender: String, CaseIterable, Codable {
+        case male, female, other, unknown
+        
+        var displayName: String {
+            self.rawValue.capitalized
+        }
+    }
     
     enum GlossaryCategory: String, CaseIterable, Codable {
         case character = "character"
@@ -35,23 +44,24 @@ struct GlossaryEntry: Codable, Identifiable, Hashable {
             case .object: return .glossaryObject
             case .concept: return .glossaryConcept
             case .organization: return .glossaryOrganization
-            case .technique: return .gold
+            case .technique: return .glossaryTechnique
             case .other: return .glossaryOther
             }
         }
     }
     
-    init(originalTerm: String, translation: String, category: GlossaryCategory, contextDescription: String, aliases: [String] = []) {
+    init(originalTerm: String, translation: String, category: GlossaryCategory, contextDescription: String, gender: Gender? = nil, aliases: [String] = []) {
         self.originalTerm = originalTerm
         self.translation = translation
         self.category = category
         self.contextDescription = contextDescription
+        self.gender = (category == .character) ? (gender ?? .unknown) : nil // Only characters have gender
         self.aliases = aliases
     }
 
     // MARK: - Custom Codable Initializer for Robustness
     enum CodingKeys: String, CodingKey {
-        case id, originalTerm, translation, category, contextDescription, usageCount, isActive, createdDate, lastUsedDate, aliases
+        case id, originalTerm, translation, category, contextDescription, gender, usageCount, isActive, createdDate, lastUsedDate, aliases
     }
 
     init(from decoder: Decoder) throws {
@@ -63,11 +73,34 @@ struct GlossaryEntry: Codable, Identifiable, Hashable {
         translation = try container.decode(String.self, forKey: .translation)
         category = try container.decode(GlossaryCategory.self, forKey: .category)
         contextDescription = try container.decodeIfPresent(String.self, forKey: .contextDescription) ?? ""
+        gender = try container.decodeIfPresent(Gender.self, forKey: .gender)
         usageCount = try container.decodeIfPresent(Int.self, forKey: .usageCount) ?? 0
         isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
         createdDate = try container.decodeIfPresent(Date.self, forKey: .createdDate) ?? Date()
         lastUsedDate = try container.decodeIfPresent(Date.self, forKey: .lastUsedDate)
-        // CRITICAL: Default aliases to an empty array if not present in the JSON.
         aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
+
+        // Ensure gender is nil if category is not character
+        if category != .character {
+            gender = nil
+        }
+    }
+    
+    // Custom encode to ensure gender is only encoded for characters
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(originalTerm, forKey: .originalTerm)
+        try container.encode(translation, forKey: .translation)
+        try container.encode(category, forKey: .category)
+        try container.encode(contextDescription, forKey: .contextDescription)
+        if category == .character {
+            try container.encodeIfPresent(gender, forKey: .gender)
+        }
+        try container.encode(usageCount, forKey: .usageCount)
+        try container.encode(isActive, forKey: .isActive)
+        try container.encode(createdDate, forKey: .createdDate)
+        try container.encodeIfPresent(lastUsedDate, forKey: .lastUsedDate)
+        try container.encode(aliases, forKey: .aliases)
     }
 }

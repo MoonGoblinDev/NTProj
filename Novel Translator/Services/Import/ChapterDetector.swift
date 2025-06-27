@@ -16,7 +16,7 @@ class ChapterDetector {
     /// - Parameters:
     ///   - text: The full raw text content from a file.
     ///   - settings: The import settings defining how to split chapters.
-    ///   - filename: The name of the file, used as a fallback title.
+    ///   - filename: The name of the file (without extension), used as a fallback title and to store the original filename.
     /// - Returns: An array of `Chapter` objects.
     func detect(from text: String, using settings: ImportSettings, filename: String) -> [Chapter] {
         guard !text.isEmpty else { return [] }
@@ -27,7 +27,7 @@ class ChapterDetector {
             
             guard components.count > 1 else {
                 // If separator is not found, treat the whole file as one chapter
-                return [createChapter(title: filename, content: text)]
+                return [createChapter(title: filename, content: text, originalFilename: filename)]
             }
             
             return components.compactMap { chunk in
@@ -39,16 +39,16 @@ class ChapterDetector {
                 let title = lines.first?.trimmingCharacters(in: .whitespaces) ?? "Untitled Chapter"
                 let content = lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
                 
-                return createChapter(title: title, content: content.isEmpty ? trimmedChunk : content)
+                return createChapter(title: title, content: content.isEmpty ? trimmedChunk : content, originalFilename: filename)
             }
         } else {
             // If auto-detect is off, treat the whole file as a single chapter
-            return [createChapter(title: filename, content: text)]
+            return [createChapter(title: filename, content: text, originalFilename: filename)]
         }
     }
     
-    private func createChapter(title: String, content: String) -> Chapter {
+    private func createChapter(title: String, content: String, originalFilename: String) -> Chapter {
         // The chapter number will be assigned later by the ViewModel
-        return Chapter(title: title, chapterNumber: 0, rawContent: content)
+        return Chapter(title: title, chapterNumber: 0, rawContent: content, originalFilename: originalFilename)
     }
 }

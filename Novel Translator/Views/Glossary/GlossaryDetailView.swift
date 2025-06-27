@@ -16,6 +16,7 @@ struct GlossaryDetailView: View {
     @State private var category: GlossaryCategory
     @State private var contextDescription: String
     @State private var aliasesString: String
+    @State private var gender: GlossaryEntry.Gender
     
     private var isFormValid: Bool {
         !originalTerm.trimmingCharacters(in: .whitespaces).isEmpty &&
@@ -32,8 +33,8 @@ struct GlossaryDetailView: View {
         _category = State(initialValue: entry.wrappedValue.category)
         _contextDescription = State(initialValue: entry.wrappedValue.contextDescription)
         _aliasesString = State(initialValue: entry.wrappedValue.aliases.joined(separator: ", "))
+        _gender = State(initialValue: entry.wrappedValue.gender ?? .unknown)
     }
-
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,6 +45,14 @@ struct GlossaryDetailView: View {
                     Picker("Category", selection: $category) {
                         ForEach(GlossaryCategory.allCases, id: \.self) { cat in
                             Text(cat.displayName).tag(cat)
+                        }
+                    }
+                    
+                    if category == .character {
+                        Picker("Gender", selection: $gender) {
+                            ForEach(GlossaryEntry.Gender.allCases, id: \.self) { g in
+                                Text(g.displayName).tag(g)
+                            }
                         }
                     }
                 }
@@ -66,23 +75,13 @@ struct GlossaryDetailView: View {
             
             HStack {
                 if !isCreating {
-                    Button("Delete", role: .destructive) {
-                        deleteEntry()
-                    }
+                    Button("Delete", role: .destructive) { deleteEntry() }
                 }
-                
                 Spacer()
-                
-                Button("Cancel", role: .cancel) {
-                    dismiss()
-                }
-                
-                Button("Save") {
-                    saveEntry()
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!isFormValid)
+                Button("Cancel", role: .cancel) { dismiss() }
+                Button("Save") { saveEntry(); dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!isFormValid)
             }
             .padding()
         }
@@ -99,18 +98,17 @@ struct GlossaryDetailView: View {
     private func saveEntry() {
         let finalAliases = getFinalAliases()
         
-        // This logic is now reversed: we update the local state, then assign it back to the binding
         var updatedEntry = entry
         updatedEntry.originalTerm = originalTerm
         updatedEntry.translation = translation
         updatedEntry.category = category
         updatedEntry.contextDescription = contextDescription
         updatedEntry.aliases = finalAliases
+        updatedEntry.gender = (category == .character) ? gender : nil
         
         if isCreating {
             project.glossaryEntries.append(updatedEntry)
         } else {
-            // The binding handles the update automatically
             self.entry = updatedEntry
         }
         project.lastModifiedDate = Date()
@@ -123,43 +121,4 @@ struct GlossaryDetailView: View {
         projectManager.saveProject()
         dismiss()
     }
-}
-
-#Preview("Editing Entry") {
-    // This helper view manages the state for the preview
-    struct PreviewWrapper: View {
-        @State private var entry: GlossaryEntry
-        private var mocks = PreviewMocks.shared
-        
-        init() {
-            _entry = State(initialValue: mocks.glossaryEntry1)
-        }
-        
-        var body: some View {
-            GlossaryDetailView(
-                entry: $entry,
-                project: mocks.project,
-                isCreating: false
-            )
-            .environmentObject(mocks.projectManager)
-        }
-    }
-    return PreviewWrapper()
-}
-
-#Preview("Creating New Entry") {
-    struct PreviewWrapper: View {
-        @State private var newEntry = GlossaryEntry(originalTerm: "", translation: "", category: .character, contextDescription: "")
-        private var mocks = PreviewMocks.shared
-        
-        var body: some View {
-            GlossaryDetailView(
-                entry: $newEntry,
-                project: mocks.project,
-                isCreating: true
-            )
-            .environmentObject(mocks.projectManager)
-        }
-    }
-    return PreviewWrapper()
 }

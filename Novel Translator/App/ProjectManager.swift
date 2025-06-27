@@ -230,6 +230,133 @@ class ProjectManager: ObservableObject {
         
         saveSettings()
     }
+    
+    // MARK: - Import / Export Logic
+    
+    func importTranslations() {
+        guard let project = currentProject else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Import Translations"
+        alert.informativeText = "Please select the translated .txt files.\n\nFor a successful import, each translation file's name must exactly match the original source file's name (e.g., 'Chapter 1.txt' for 'Chapter 1.txt')."
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Cancel")
+        
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let openPanel = NSOpenPanel()
+        openPanel.canChooseFiles = true
+        openPanel.canChooseDirectories = true
+        openPanel.allowsMultipleSelection = true
+        openPanel.allowedContentTypes = [.plainText]
+
+        if openPanel.runModal() == .OK {
+            var matchedCount = 0
+            var unmatchedFiles: [String] = []
+
+            for url in openPanel.urls {
+                let filename = url.deletingPathExtension().lastPathComponent
+                
+                if let chapterIndex = project.chapters.firstIndex(where: { $0.originalFilename == filename }) {
+                    do {
+                        let content = try String(contentsOf: url, encoding: .utf8)
+                        project.chapters[chapterIndex].translatedContent = content
+                        project.chapters[chapterIndex].translationStatus = .needsReview
+                        matchedCount += 1
+                    } catch {
+                        print("Could not read file \(url.lastPathComponent): \(error)")
+                    }
+                } else {
+                    unmatchedFiles.append(url.lastPathComponent)
+                }
+            }
+
+            project.lastModifiedDate = Date()
+            saveProject()
+            
+            // Show summary alert
+            let summaryAlert = NSAlert()
+            summaryAlert.messageText = "Import Complete"
+            var infoText = "\(matchedCount) translations were successfully imported and matched."
+            if !unmatchedFiles.isEmpty {
+                infoText += "\n\n\(unmatchedFiles.count) files could not be matched:\n" + unmatchedFiles.joined(separator: "\n")
+            }
+            summaryAlert.informativeText = infoText
+            summaryAlert.addButton(withTitle: "OK")
+            summaryAlert.runModal()
+        }
+    }
+
+    func exportProjectToTxt() {
+        guard let project = currentProject else { return }
+        
+        let savePanel = NSSavePanel()
+        savePanel.title = "Choose Export Destination"
+        savePanel.prompt = "Export"
+        savePanel.canCreateDirectories = true
+        savePanel.nameFieldStringValue = project.name
+        
+        if savePanel.runModal() == .OK {
+            guard let destURL = savePanel.url else { return }
+            let fileManager = FileManager.default
+            
+            do {
+                // Create subdirectories
+                let sourceDir = destURL.appendingPathComponent("Source (\(project.sourceLanguage))")
+                let transDir = destURL.appendingPathComponent("Translation (\(project.targetLanguage))")
+                try fileManager.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+                try fileManager.createDirectory(at: transDir, withIntermediateDirectories: true)
+                
+                for chapter in project.chapters.sorted(by: { $0.chapterNumber < $1.chapterNumber }) {
+                    let filename = "\(chapter.originalFilename ?? "Chapter_\(chapter.chapterNumber)").txt"
+                    
+                    // Write source file
+                    let sourceURL = sourceDir.appendingPathComponent(filename)
+                    try chapter.rawContent.write(to: sourceURL, atomically: true, encoding: .utf8)
+                    
+                    // Write translation file
+                    if let transContent = chapter.translatedContent {
+                        let transURL = transDir.appendingPathComponent(filename)
+                        try transContent.write(to: transURL, atomically: true, encoding: .utf8)
+                    }
+                }
+            } catch {
+                // TODO: Show error alert to user
+                print("Failed to export project: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    func exportTranslationToTxt() {
+        guard let project = currentProject else { return }
+        
+        let savePanel = NSSavePanel()
+        savePanel.title = "Choose Export Destination"
+        savePanel.prompt = "Export"
+        savePanel.canCreateDirectories = true
+        savePanel.nameFieldStringValue = "\(project.name) (\(project.targetLanguage))"
+        
+        if savePanel.runModal() == .OK {
+            guard let destURL = savePanel.url else { return }
+            let fileManager = FileManager.default
+            
+            do {
+                try fileManager.createDirectory(at: destURL, withIntermediateDirectories: true)
+                
+                for chapter in project.chapters.sorted(by: { $0.chapterNumber < $1.chapterNumber }) {
+                    if let transContent = chapter.translatedContent, !transContent.isEmpty {
+                        let filename = "\(chapter.originalFilename ?? "Chapter_\(chapter.chapterNumber)").txt"
+                        let fileURL = destURL.appendingPathComponent(filename)
+                        try transContent.write(to: fileURL, atomically: true, encoding: .utf8)
+                    }
+                }
+            } catch {
+                // TODO: Show error alert to user
+                print("Failed to export translation: \(error.localizedDescription)")
+            }
+        }
+    }
+
 
     // MARK: - Preview & Testing Helpers
 

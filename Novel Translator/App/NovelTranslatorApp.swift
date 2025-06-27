@@ -12,7 +12,7 @@ struct NovelTranslatorApp: App {
             ContentView()
                 .environmentObject(appContext)
                 .environmentObject(projectManager)
-                .environmentObject(workspaceViewModel) 
+                .environmentObject(workspaceViewModel)
                 .onChange(of: projectManager.currentProject) { _, newProject in
                     workspaceViewModel.setCurrentProject(newProject)
                 }
@@ -38,8 +38,28 @@ struct NovelTranslatorApp: App {
                     projectManager.closeProject()
                 }
                 .disabled(projectManager.currentProject == nil)
-            
             }
+            
+            CommandMenu("Import") {
+                Button("Import Translations...") {
+                    projectManager.importTranslations()
+                }
+                .disabled(projectManager.currentProject == nil)
+                // Note: Glossary import is handled via the UI in the sidebar
+            }
+            
+            CommandMenu("Export") {
+                Button("Export Project to Text Files...") {
+                    projectManager.exportProjectToTxt()
+                }
+                .disabled(projectManager.currentProject == nil)
+                
+                Button("Export Translation to Text Files...") {
+                    projectManager.exportTranslationToTxt()
+                }
+                .disabled(projectManager.currentProject == nil)
+            }
+            
             TextEditingCommands()
             InspectorCommands()
         }

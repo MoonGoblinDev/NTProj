@@ -24,7 +24,7 @@ struct EditorAreaView: View {
     @State private var searchViewModel = EditorSearchViewModel()
     @State private var isEditorSearchActive = false
     @State private var isConfigPopoverShown = false
-    @State private var isGlossaryExtractionPresented = false
+    @State private var isGlossaryAssistantPresented = false // Changed name
     
     // New state for the popover-like view
     struct GlossaryInfo: Identifiable {
@@ -63,7 +63,6 @@ struct EditorAreaView: View {
                     editorWithButtons(chapter: chapter, editorState: editorState)
                 }
                 
-                // The new glossary info popup view
                 if let info = activeGlossaryInfo {
                     GlossaryPopupView(
                         info: info,
@@ -80,73 +79,49 @@ struct EditorAreaView: View {
                 }
             }
             .onAppear {
-                            // Initial load when the view appears for the first time
-                            updateSourceGlossaryAndHighlights()
-                            updateTranslatedGlossaryAndHighlights()
-                        }
-                        .onChange(of: activeChapter?.id) {
-                            // When chapter changes, force a full recalculation
-                            resetEditorSearch()
-                            lastProcessedTextContent = nil
-                            lastProcessedTranslatedTextContent = nil
-                            updateSourceGlossaryAndHighlights()
-                            updateTranslatedGlossaryAndHighlights()
-                        }
-                        .onChange(of: activeEditorState?.sourceAttributedText) {
-                            // For source text (user typing), update highlights synchronously.
-                            updateSourceGlossaryAndHighlights()
-                        }
-                        .onChange(of: activeEditorState?.translatedAttributedText) {
-                            // For translated text:
-                            // If actively streaming, dispatch highlight update asynchronously to avoid rapid double-updates.
-                            // Otherwise (e.g., user manually editing translated text), update synchronously.
-                            if translationViewModel.isTranslating {
-                                DispatchQueue.main.async {
-                                    updateTranslatedGlossaryAndHighlights()
-                                }
-                            } else {
-                                updateTranslatedGlossaryAndHighlights()
-                            }
-                        }
-                        .onChange(of: activeEditorState?.sourceSelection) { _, newSelection in
-                            handleSourceGlossarySelection(newSelection)
-                        }
-            .onChange(of: activeEditorState?.translatedSelection) { _, newSelection in
-                handleTranslatedGlossarySelection(newSelection)
-            }
-            .onChange(of: appContext.searchResultToHighlight) { _, newResult in
-                if let result = newResult {
-                    handleSearchResultNavigation(result)
-                    // Clear the highlight request so it can be triggered again for the same item.
-                    appContext.searchResultToHighlight = nil
-                }
-            }
-            .onChange(of: searchViewModel.searchQuery) {
-                updateEditorSearch()
-            }
-            .onChange(of: searchViewModel.currentResultIndex) {
-                reapplySourceHighlights()
-            }
-            .onChange(of: projectManager.settings.disableGlossaryHighlighting) { _, _ in
-                // Re-calculate and apply highlights when the setting is toggled to add/remove them instantly.
                 updateSourceGlossaryAndHighlights()
                 updateTranslatedGlossaryAndHighlights()
             }
-            .sheet(isPresented: $isGlossaryExtractionPresented) {
-                if let chapterID = activeChapter?.id {
-                    GlossaryExtractionView(
-                        project: project,
-                        projectManager: projectManager,
-                        currentChapterID: chapterID
-                    )
+            .onChange(of: activeChapter?.id) {
+                resetEditorSearch()
+                lastProcessedTextContent = nil
+                lastProcessedTranslatedTextContent = nil
+                updateSourceGlossaryAndHighlights()
+                updateTranslatedGlossaryAndHighlights()
+            }
+            .onChange(of: activeEditorState?.sourceAttributedText) {
+                updateSourceGlossaryAndHighlights()
+            }
+            .onChange(of: activeEditorState?.translatedAttributedText) {
+                if translationViewModel.isTranslating {
+                    DispatchQueue.main.async { updateTranslatedGlossaryAndHighlights() }
+                } else {
+                    updateTranslatedGlossaryAndHighlights()
                 }
             }
+            .onChange(of: activeEditorState?.sourceSelection, perform: handleSourceGlossarySelection)
+            .onChange(of: activeEditorState?.translatedSelection, perform: handleTranslatedGlossarySelection)
+            .onChange(of: appContext.searchResultToHighlight) { _, newResult in
+                if let result = newResult {
+                    handleSearchResultNavigation(result)
+                    appContext.searchResultToHighlight = nil
+                }
+            }
+            .onChange(of: searchViewModel.searchQuery) { updateEditorSearch() }
+            .onChange(of: searchViewModel.currentResultIndex) { reapplySourceHighlights() }
+            .onChange(of: projectManager.settings.disableGlossaryHighlighting) { _, _ in
+                updateSourceGlossaryAndHighlights()
+                updateTranslatedGlossaryAndHighlights()
+            }
+            .sheet(isPresented: $isGlossaryAssistantPresented) {
+                GlossaryAssistantView(
+                    project: project,
+                    projectManager: projectManager,
+                    currentChapterID: activeChapter?.id
+                )
+            }
         } else {
-            ContentUnavailableView(
-                "No Chapter Selected",
-                systemImage: "text.book.closed",
-                description: Text("Select a chapter from the list in the sidebar.")
-            )
+            ContentUnavailableView("No Chapter Selected", systemImage: "text.book.closed", description: Text("Select a chapter from the list in the sidebar."))
         }
     }
     
@@ -222,19 +197,19 @@ struct EditorAreaView: View {
     }
     
     private var extractGlossaryButton: some View {
-        Button {
-            isGlossaryExtractionPresented.toggle()
-        } label: {
-            Label("Extract Glossary", systemImage: "wand.and.stars")
+            Button {
+                isGlossaryAssistantPresented.toggle()
+            } label: {
+                Label("Glossary Assistant", systemImage: "wand.and.stars")
+            }
+            .tint(.gray)
+            .buttonStyle(.borderedProminent)
+            .help("Extract or import glossary terms using AI.")
+            .onHover { isHovering in
+                if isHovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+            }
+            .disabled(isSourceTextEmpty || isTranslatedTextEmpty)
         }
-        .tint(.gray)
-        .buttonStyle(.borderedProminent)
-        .help("Automatically extract potential new glossary terms from the source and translation text.")
-        .onHover { isHovering in
-            if isHovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
-        }
-        .disabled(isSourceTextEmpty || isTranslatedTextEmpty)
-    }
     
     private func promptPreviewButton(chapter: Chapter) -> some View {
         Button("Prompt Preview", systemImage: "sparkles.square.filled.on.square", action: onShowPromptPreview)
@@ -248,16 +223,32 @@ struct EditorAreaView: View {
     }
     
     private func translateButton(chapter: Chapter) -> some View {
-        Button("Translate", systemImage: "sparkles") {
+        
+        Button(action: {
             Task {
                 await translationViewModel.streamTranslateChapter(project: project, chapter: chapter, settings: projectManager.settings, workspace: workspaceViewModel)
             }
+        }) {
+            if !translationViewModel.isTranslating {
+                Label("Translate", systemImage: "sparkles")
+            }
+            else {
+                HStack{
+                    ProgressView()
+                        .frame(width: 10, height: 10)
+                        .scaleEffect(0.4)
+                    Text("Translating...")
+                }
+            }
+            
         }
+            
         .buttonStyle(.borderedProminent)
         .disabled(isSourceTextEmpty || translationViewModel.isTranslating)
         .onHover { isHovering in
             if isHovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
         }
+        
     }
     // MARK: - Highlighting & Search Logic
 

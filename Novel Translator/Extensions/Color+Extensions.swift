@@ -19,4 +19,5 @@ extension Color {
     static let glossaryConcept = Color.teal
     static let glossaryOrganization = Color.brown
     static let glossaryOther = Color.blue
+    static let glossaryTechnique = Color.pink
 }

@@ -83,6 +83,7 @@ class PromptBuilder {
             .joined(separator: "\n")
         
         let allCategoryValues = GlossaryEntry.GlossaryCategory.allCases.map { $0.rawValue }.joined(separator: ", ")
+        let allGenderValues = GlossaryEntry.Gender.allCases.map { $0.rawValue }.joined(separator: ", ")
 
         var instructions = """
         You are a linguistic expert tasked with expanding a glossary for a novel translation project. Analyze the provided source text and its professional translation. Identify new, important, or recurring terms (such as characters, places, special abilities, items, or concepts) that are NOT already in the existing glossary list.
@@ -93,26 +94,28 @@ class PromptBuilder {
         1.  **DO NOT** extract terms that are already present in the "Existing Glossary" list.
         2.  Focus on proper nouns, unique concepts, or recurring objects. Avoid common words.
         3.  The `contextDescription` should be concise and based *only* on the provided texts.
-        4.  You **MUST** return your findings as a JSON object. This object must contain a single key, "entries", which holds an array of glossary objects.
-        5.  Each object in the "entries" array **MUST** conform to this schema:
+        4.  For entries with the category `character`, if you can infer the character's gender from the text (e.g., pronouns like "he" or "she"), set the `gender` field. If not, omit the field or set it to "unknown".
+        5.  You **MUST** return your findings as a JSON object. This object must contain a single key, "entries", which holds an array of glossary objects.
+        6.  Each object in the "entries" array **MUST** conform to this schema:
             - `originalTerm` (string, required): The term in the source language.
             - `translation` (string, required): The term in the target language.
-            - `category` (string, enum, required): The category of the term. Must be one of: \(allCategoryValues).
+            - `category` (string, enum, required): Must be one of: \(allCategoryValues).
             - `contextDescription` (string, optional): A brief explanation.
-        6.  If no new terms are found, you **MUST** return an empty array like this: `{"entries": []}`.
+            - `gender` (string, enum, optional): Only for 'character' category. Must be one of: \(allGenderValues).
+        7.  If no new terms are found, you **MUST** return an empty array like this: `{"entries": []}`.
         """
         
         if categoriesToExtract.count < GlossaryEntry.GlossaryCategory.allCases.count {
             let categoryList = categoriesToExtract.map { $0.rawValue }.joined(separator: ", ")
-            instructions += "\n7.  Only extract terms belonging to the following categories: \(categoryList)."
+            instructions += "\n8.  Only extract terms belonging to the following categories: \(categoryList)."
         }
         
         if !fillContext {
-            instructions += "\n8.  The `contextDescription` field for all extracted items **MUST** be an empty string."
+            instructions += "\n9.  The `contextDescription` field for all extracted items **MUST** be an empty string."
         }
         
         if !additionalQuery.isEmpty {
-            instructions += "\n9.  Follow this additional instruction carefully: \(additionalQuery)"
+            instructions += "\n10. Follow this additional instruction carefully: \(additionalQuery)"
         }
 
         let prompt = """
@@ -139,6 +142,35 @@ class PromptBuilder {
         """
         
         return prompt
+    }
+    
+    func buildGlossaryImportFromTextPrompt(text: String, sourceLanguage: String, targetLanguage: String) -> String {
+        let allCategoryValues = GlossaryEntry.GlossaryCategory.allCases.map { $0.rawValue }.joined(separator: ", ")
+        let allGenderValues = GlossaryEntry.Gender.allCases.map { $0.rawValue }.joined(separator: ", ")
+        
+        return """
+        You are a data extraction expert. Your task is to parse the following text, which contains a list of glossary terms, and convert it into a valid JSON array.
+
+        CRITICAL INSTRUCTIONS:
+        1. The input text contains terms, typically one per line, in a format like `Source Term = Translation`. The separator may vary. Your job is to correctly identify the source term and its corresponding translation.
+        2. Based on the name and common knowledge, attempt to infer the `category` for each term (e.g., if it's a person's name, use 'character'; if it's a city, use 'place'). If you cannot determine the category, default to "other".
+        3. If you identify a term as a 'character', also attempt to infer its `gender` (male, female, other). If you cannot determine the gender, set it to "unknown".
+        4. You MUST return a JSON object with a single key, "entries", which holds an array of glossary objects.
+        5. Each object in the "entries" array MUST conform to this schema:
+            - `originalTerm` (string, required): The term in the source language (\(sourceLanguage)).
+            - `translation` (string, required): The term in the target language (\(targetLanguage)).
+            - `category` (string, enum, required): Your inferred category. Must be one of: \(allCategoryValues).
+            - `contextDescription` (string, required): For all items, set this to an empty string "".
+            - `aliases` (array of strings, required): For all items, set this to an empty array [].
+            - `gender` (string, enum, optional): Your inferred gender. Only for 'character' category. Must be one of: \(allGenderValues).
+        6. If the text is empty or you cannot parse any terms, you MUST return an empty array like this: `{"entries": []}`.
+
+        --- TEXT TO PARSE START ---
+        \(text)
+        --- TEXT TO PARSE END ---
+
+        Now, provide the JSON object with the "entries" key.
+        """
     }
 
     /// Public method to clean the LLM's output if line-syncing was used.
@@ -216,6 +248,9 @@ class PromptBuilder {
             // Sort entries within the category alphabetically by the original term.
             for entry in entries.sorted(by: { $0.originalTerm < $1.originalTerm }) {
                 var line = "\(entry.originalTerm) -> \(entry.translation)"
+                if entry.category.displayName == "Character" {
+                    line += " | Gender: \(entry.gender?.displayName ?? "")"
+                }
                 if !entry.contextDescription.isEmpty {
                     line += " | Context: \(entry.contextDescription)"
                 }

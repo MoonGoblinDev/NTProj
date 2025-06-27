@@ -40,10 +40,6 @@ struct TranslationWorkspaceView: View {
                     } else {
                         initialPlaceholderView
                     }
-                    
-                    if viewModel?.isTranslating == true {
-                        loadingOverlay
-                    }
                 }
         .navigationTitle("")
         .toolbar {
@@ -171,15 +167,6 @@ struct TranslationWorkspaceView: View {
         ContentUnavailableView("No Chapter Selected", systemImage: "text.book.closed", description: Text("Select a chapter from the list in the sidebar."))
     }
     
-    private var loadingOverlay: some View {
-        ProgressView()
-            .progressViewStyle(.circular)
-            .padding()
-            .background(.regularMaterial, in: Circle())
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .padding()
-            .transition(.opacity.animation(.easeInOut))
-    }
     
     private var promptPreviewSheet: some View {
         VStack(spacing: 0) {

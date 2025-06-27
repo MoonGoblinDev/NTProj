@@ -71,7 +71,7 @@ struct TranslationEditorView: View {
             
             Rectangle()
                 .fill(.background)
-                .frame(width: .infinity, height: 40)
+                .frame(height: 40)
         }
         .navigationTitle("") // This can be removed as it's not in a NavigationView here
     }

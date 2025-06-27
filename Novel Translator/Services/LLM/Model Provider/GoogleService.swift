@@ -67,7 +67,7 @@ private struct GeminiGlossaryRequestPayload: Encodable {
     struct ItemsSchema: Encodable {
         let type = "object"
         let properties: [String: Property]
-        let required = ["originalTerm", "translation", "category", "contextDescription"]
+        let required = ["originalTerm", "translation", "category"]
     }
     
     struct Property: Encodable {
@@ -266,7 +266,12 @@ class GoogleService: LLMServiceProtocol {
                         description: "The category of the term.",
                         enum: GlossaryEntry.GlossaryCategory.allCases.map { $0.rawValue }
                     ),
-                    "contextDescription": .init(type: "string", description: "A brief explanation of the term's context or meaning in the story.")
+                    "contextDescription": .init(type: "string", description: "A brief explanation of the term's context or meaning in the story."),
+                    "gender": .init(
+                        type: "string",
+                        description: "The character's gender, if applicable.",
+                        enum: GlossaryEntry.Gender.allCases.map { $0.rawValue }
+                    )
                 ]
             )
         )

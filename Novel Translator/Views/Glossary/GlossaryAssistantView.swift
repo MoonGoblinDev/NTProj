@@ -1,49 +1,45 @@
 import SwiftUI
 
-struct GlossaryExtractionView: View {
+struct GlossaryAssistantView: View {
     @Environment(\.dismiss) private var dismiss
     
-    @State private var viewModel: GlossaryExtractionViewModel
+    @State private var viewModel: GlossaryAssistantViewModel
     @State private var isAddChapterPopoverPresented = false
     @State private var isAddCategoryPopoverPresented = false
     
-    init(project: TranslationProject, projectManager: ProjectManager, currentChapterID: UUID) {
-        _viewModel = State(initialValue: GlossaryExtractionViewModel(
+    init(project: TranslationProject, projectManager: ProjectManager, currentChapterID: UUID?) {
+        _viewModel = State(initialValue: GlossaryAssistantViewModel(
             project: project,
             projectManager: projectManager,
             currentChapterID: currentChapterID
         ))
     }
     
-    init(viewModel: GlossaryExtractionViewModel) {
+    // Initializer for SwiftUI Previews
+    init(viewModel: GlossaryAssistantViewModel) {
         _viewModel = State(initialValue: viewModel)
     }
     
     var body: some View {
         VStack(spacing: 0) {
             header
-            
             Divider()
 
             switch viewModel.viewState {
+            case .initial:
+                initialChoiceView
             case .options:
                 optionsForm
             case .loading:
-                ProgressView("Extracting terms from text...")
+                ProgressView(viewModel.mode == .extract ? "Extracting terms..." : "Importing terms...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .results:
-                if viewModel.selectableEntries.isEmpty {
-                    ContentUnavailableView("No New Terms Found", systemImage: "sparkles.slash", description: Text("The AI could not identify any new glossary terms from the provided text."))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    resultsList
-                }
+                resultsView
             case .error:
                 errorView
             }
             
             Divider()
-            
             footer
         }
         .frame(minWidth: 800, idealWidth: 900, minHeight: 600)
@@ -51,11 +47,46 @@ struct GlossaryExtractionView: View {
     
     private var header: some View {
         HStack {
-            Text("Glossary Extraction")
+            Text("Glossary Assistant")
                 .font(.title2)
             Spacer()
+            if viewModel.viewState != .initial {
+                Button("Start Over") {
+                    viewModel.viewState = .initial
+                }
+            }
         }
         .padding()
+    }
+    
+    private var initialChoiceView: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            HStack(spacing: 40) {
+                ToolCard(
+                    title: "Extract from Chapters",
+                    description: "Use AI to analyze source and translated text from selected chapters to find new terms.",
+                    systemImage: "doc.text.magnifyingglass",
+                    action: { viewModel.setModeAndProceed(.extract) }
+                )
+                
+                ToolCard(
+                    title: "Import from JSON",
+                    description: "Import a pre-formatted JSON file containing an array of glossary entries.",
+                    systemImage: "doc.richtext",
+                    action: { viewModel.setModeAndProceed(.importJSON) }
+                )
+
+                ToolCard(
+                    title: "Import from Text",
+                    description: "Use AI to parse a plain text file (e.g., 'Term = Translation') into glossary entries.",
+                    systemImage: "sparkles",
+                    action: { viewModel.setModeAndProceed(.importText) }
+                )
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var optionsForm: some View {
@@ -78,18 +109,10 @@ struct GlossaryExtractionView: View {
                         }
                         .padding(.vertical, 4)
                     }
-                    
                     Divider()
-                    
-                    Button {
-                        isAddChapterPopoverPresented = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.bordered)
-                    .popover(isPresented: $isAddChapterPopoverPresented, arrowEdge: .bottom) {
-                        addChapterPopoverView
-                    }
+                    Button { isAddChapterPopoverPresented = true } label: { Image(systemName: "plus") }
+                        .buttonStyle(.bordered)
+                        .popover(isPresented: $isAddChapterPopoverPresented, arrowEdge: .bottom) { addChapterPopoverView }
                 }
             }
             .padding(.vertical, 4)
@@ -99,31 +122,19 @@ struct GlossaryExtractionView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
                             if viewModel.selectedCategoryItems.isEmpty {
-                                Text("No categories selected. Click '+' to add.")
-                                    .foregroundStyle(.secondary)
-                                    .padding(.vertical, 4)
+                                Text("No categories selected. Click '+' to add.").foregroundStyle(.secondary).padding(.vertical, 4)
                             } else {
                                 ForEach(viewModel.selectedCategoryItems, id: \.self) { category in
-                                    CategoryTagView(category: category) {
-                                        viewModel.selectedCategories.remove(category)
-                                    }
+                                    CategoryTagView(category: category) { viewModel.selectedCategories.remove(category) }
                                 }
                             }
                         }
                         .padding(.vertical, 4)
                     }
-                    
                     Divider()
-                    
-                    Button {
-                        isAddCategoryPopoverPresented = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.bordered)
-                    .popover(isPresented: $isAddCategoryPopoverPresented, arrowEdge: .bottom) {
-                        addCategoryPopoverView
-                    }
+                    Button { isAddCategoryPopoverPresented = true } label: { Image(systemName: "plus") }
+                        .buttonStyle(.bordered)
+                        .popover(isPresented: $isAddCategoryPopoverPresented, arrowEdge: .bottom) { addCategoryPopoverView }
                 }
             }
             .padding(.vertical, 4)
@@ -137,90 +148,73 @@ struct GlossaryExtractionView: View {
                 
                 VStack(alignment: .leading) {
                     Text("Additional Instructions (Optional)")
-                    TextEditor(text: $viewModel.additionalQuery)
-                        .frame(height: 60)
+                    TextEditor(text: $viewModel.additionalQuery).frame(height: 60)
                 }
             }
         }
         .formStyle(.grouped)
     }
     
+    @ViewBuilder
+    private var resultsView: some View {
+        if viewModel.selectableEntries.isEmpty {
+            ContentUnavailableView("No New Terms Found", systemImage: "sparkles.slash", description: Text("The assistant could not identify any new glossary terms to add."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            resultsList
+        }
+    }
+    
     private var resultsList: some View {
         List($viewModel.selectableEntries) { $item in
             HStack(alignment: .top, spacing: 12) {
-                Toggle("", isOn: $item.isSelected)
-                    .labelsHidden()
-                    .padding(.top, 6)
-
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                    GridRow(alignment: .center) {
-                        Text("Source Term")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(item.entry.originalTerm)
-                            .fontWeight(.semibold)
-                            .textSelection(.enabled)
-                    }
-                    
-                    Divider()
-                    
-                    GridRow(alignment: .center) {
-                        Text("Category")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        
-                        Picker("Category", selection: $item.entry.category) {
-                            ForEach(GlossaryEntry.GlossaryCategory.allCases, id: \.self) { category in
-                                Text(category.displayName).tag(category)
-                            }
-                        }
-                        .labelsHidden()
-                    }
-                    
-                    GridRow(alignment: .center) {
-                        Text("Translation")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        
+                Toggle("", isOn: $item.isSelected).labelsHidden().padding(.top, 6)
+                VStack(spacing: 8) {
+                    HStack {
+                        TextField("Original Term", text: $item.entry.originalTerm).fontWeight(.semibold)
+                        Text("->").foregroundStyle(.secondary)
                         TextField("Translation", text: $item.entry.translation)
                     }
                     
-                    GridRow(alignment: .top) {
-                        Text("Context")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 4)
+                    HStack(spacing: 15) {
+                        Picker("Category", selection: $item.entry.category) {
+                            ForEach(GlossaryEntry.GlossaryCategory.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                        }
+                        .onChange(of: item.entry.category) { _, newCategory in
+                            if newCategory != .character {
+                                item.entry.gender = nil
+                            } else if item.entry.gender == nil {
+                                item.entry.gender = .unknown
+                            }
+                        }
                         
-                        TextField("Context Description", text: $item.entry.contextDescription, axis: .vertical)
-                            .lineLimit(1...3)
+                        if item.entry.category == .character {
+                            Picker("Gender", selection: Binding(get: { item.entry.gender ?? .unknown }, set: { item.entry.gender = $0 })) {
+                                ForEach(GlossaryEntry.Gender.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                            }
+                        }
+                        Spacer()
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    
+                    TextField("Context Description", text: $item.entry.contextDescription, axis: .vertical)
+                        .lineLimit(1...3)
+                        .textFieldStyle(.roundedBorder)
                 }
                 .textFieldStyle(.plain)
-                .pickerStyle(.menu)
             }
             .padding(.vertical, 8)
         }
         .listStyle(.inset)
-        .environment(\.defaultMinListRowHeight, 120)
     }
     
     private var errorView: some View {
         VStack(alignment: .center, spacing: 16) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 40))
-                .foregroundColor(.red)
-            Text("An Error Occurred")
-                .font(.title3)
-                .fontWeight(.bold)
-            Text(viewModel.errorMessage ?? "An unknown error occurred.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            Button("Back to Options") {
-                viewModel.viewState = .options
-            }
-            .padding(.top)
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 40)).foregroundColor(.red)
+            Text("An Error Occurred").font(.title3).fontWeight(.bold)
+            Text(viewModel.errorMessage ?? "An unknown error occurred.").font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal)
+            Button("Back to Options") { viewModel.viewState = .initial }.padding(.top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -230,31 +224,24 @@ struct GlossaryExtractionView: View {
         HStack {
             if viewModel.viewState == .results {
                 let selectedCount = viewModel.selectableEntries.filter(\.isSelected).count
-                Text("\(selectedCount) of \(viewModel.selectableEntries.count) items selected")
-                    .foregroundStyle(.secondary)
+                Text("\(selectedCount) of \(viewModel.selectableEntries.count) items selected").foregroundStyle(.secondary)
             }
-            
             Spacer()
-            
-            Button("Cancel", role: .cancel) {
-                dismiss()
-            }
+            Button("Cancel", role: .cancel) { dismiss() }
             
             switch viewModel.viewState {
             case .options:
-                Button("Start Extraction") {
-                    viewModel.startExtraction()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.selectedChapterIDs.isEmpty || viewModel.selectedCategories.isEmpty)
+                Button("Start Extraction") { viewModel.startExtraction() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(viewModel.selectedChapterIDs.isEmpty || viewModel.selectedCategories.isEmpty)
             case .results:
-                Button("Save Selected") {
+                Button("Add Selected to Glossary") {
                     viewModel.saveSelectedEntriesAndProject()
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(viewModel.selectableEntries.filter(\.isSelected).isEmpty)
-            case .loading, .error:
+            case .initial, .loading, .error:
                 EmptyView()
             }
         }
@@ -322,6 +309,31 @@ struct GlossaryExtractionView: View {
 
 // MARK: - Local Subviews
 
+fileprivate struct ToolCard: View {
+    let title: String
+    let description: String
+    let systemImage: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.largeTitle)
+                    .foregroundColor(.accentColor)
+                Text(title).font(.headline)
+                Text(description).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding()
+            .frame(width: 220, height: 180)
+            .background(.background.secondary)
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 fileprivate struct ChapterTagView: View {
     let chapter: Chapter
     let onRemove: () -> Void
@@ -373,38 +385,51 @@ fileprivate struct CategoryTagView: View {
     }
 }
 
-#Preview("Options State") {
+// MARK: - Previews
+
+#Preview("Initial State") {
     let mocks = PreviewMocks.shared
-    return GlossaryExtractionView(
+    return GlossaryAssistantView(
         project: mocks.project,
         projectManager: mocks.projectManager,
         currentChapterID: mocks.chapter1.id
     )
 }
 
+#Preview("Options State") {
+    let mocks = PreviewMocks.shared
+    let vm = GlossaryAssistantViewModel(
+        project: mocks.project,
+        projectManager: mocks.projectManager,
+        currentChapterID: mocks.chapter1.id
+    )
+    vm.viewState = .options
+    return GlossaryAssistantView(viewModel: vm)
+}
+
 #Preview("Results State") {
     let mocks = PreviewMocks.shared
-    let vm = GlossaryExtractionViewModel(
+    let vm = GlossaryAssistantViewModel(
         project: mocks.project,
         projectManager: mocks.projectManager,
         currentChapterID: mocks.chapter1.id
     )
     vm.viewState = .results
     vm.selectableEntries = [
-        .init(entry: .init(originalTerm: "Lady of the Lake", translation: "湖の乙女", category: .character, contextDescription: "Gave Arthur the sword.")),
+        .init(entry: .init(originalTerm: "Lady of the Lake", translation: "湖の乙女", category: .character, contextDescription: "Gave Arthur the sword.", gender: .female)),
         .init(entry: .init(originalTerm: "Gold", translation: "金", category: .object, contextDescription: "The dragon sleeps on it."))
     ]
-    return GlossaryExtractionView(viewModel: vm)
+    return GlossaryAssistantView(viewModel: vm)
 }
 
 #Preview("Error State") {
     let mocks = PreviewMocks.shared
-    let vm = GlossaryExtractionViewModel(
+    let vm = GlossaryAssistantViewModel(
         project: mocks.project,
         projectManager: mocks.projectManager,
         currentChapterID: mocks.chapter1.id
     )
     vm.viewState = .error
     vm.errorMessage = "The API returned an error (Status Code: 401): Invalid API Key."
-    return GlossaryExtractionView(viewModel: vm)
+    return GlossaryAssistantView(viewModel: vm)
 }
