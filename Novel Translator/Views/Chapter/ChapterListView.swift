@@ -38,9 +38,10 @@ struct ChapterListView: View {
                                         .foregroundStyle(.primary)
                                 }
                                 Spacer()
-                                Text(chapter.translationStatus.rawValue)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                Text("\(chapter.translatedLineCount) / \(chapter.sourceLineCount)")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(lineCountColor(for: chapter))
+                                    .fontWeight(.medium)
                             }
                             .foregroundStyle(.primary)
                             .contentShape(Rectangle())
@@ -54,6 +55,27 @@ struct ChapterListView: View {
                 .scrollContentBackground(.hidden)
             }
         }
+    }
+    
+    private func lineCountColor(for chapter: Chapter) -> Color {
+        // if translation count = 0, make it gray
+        if chapter.translatedLineCount == 0 {
+            return .secondary
+        }
+        // if translation count > source count make color red
+        if chapter.translatedLineCount > chapter.sourceLineCount {
+            return .red
+        }
+        // if translation < count make color yellow
+        if chapter.translatedLineCount < chapter.sourceLineCount {
+            return .orange // Using orange for better visibility than yellow
+        }
+        // if same make it green
+        if chapter.translatedLineCount == chapter.sourceLineCount {
+            return .green
+        }
+        // Fallback
+        return .secondary
     }
     
     private func rowBackground(for chapterID: UUID) -> some View {
@@ -78,19 +100,4 @@ struct ChapterListView: View {
             project.chapters.removeAll { $0.id == id }
         }
     }
-}
-
-#Preview("Chapter List") {
-    let mocks = PreviewMocks.shared
-    return ChapterListView(project: mocks.project)
-        .environmentObject(mocks.workspaceViewModel)
-        .frame(width: 350, height: 400)
-}
-
-#Preview("Empty Chapter List") {
-    let mocks = PreviewMocks.shared
-    let emptyProject = TranslationProject(name: "Empty", sourceLanguage: "A", targetLanguage: "B")
-    return ChapterListView(project: emptyProject)
-        .environmentObject(mocks.workspaceViewModel)
-        .frame(width: 350, height: 400)
 }

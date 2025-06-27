@@ -15,6 +15,16 @@ struct Chapter: Codable, Identifiable {
     
     var translationVersions: [TranslationVersion] = []
     
+    var sourceLineCount: Int {
+        guard !rawContent.isEmpty else { return 0 }
+        return rawContent.components(separatedBy: .newlines).count
+    }
+    
+    var translatedLineCount: Int {
+        guard let content = translatedContent, !content.isEmpty else { return 0 }
+        return content.components(separatedBy: .newlines).count
+    }
+    
     enum TranslationStatus: String, CaseIterable, Codable {
         case pending = "Pending"
         case inProgress = "In Progress"
