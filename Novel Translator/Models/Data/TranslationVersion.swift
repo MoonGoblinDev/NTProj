@@ -1,6 +1,6 @@
 import Foundation
 
-struct TranslationVersion: Codable, Identifiable {
+struct TranslationVersion: Codable, Identifiable, Equatable {
     var id: UUID = UUID()
     var versionNumber: Int
     var content: String

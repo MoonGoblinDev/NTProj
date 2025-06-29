@@ -96,9 +96,15 @@ struct EditorAreaView: View {
                 updateSourceGlossaryAndHighlights()
             }
             .onChange(of: activeEditorState?.translatedAttributedText) {
-                if translationViewModel.isTranslating {
-                    DispatchQueue.main.async { updateTranslatedGlossaryAndHighlights() }
-                } else {
+                // MODIFIED: Only perform highlighting when the user is editing manually (i.e., not during a stream).
+                // The highlight pass after a stream is handled by the onChange(of: isTranslating) modifier.
+                if !translationViewModel.isTranslating {
+                    updateTranslatedGlossaryAndHighlights()
+                }
+            }
+            .onChange(of: translationViewModel.isTranslating) { _, isTranslating in
+                // NEW: When a translation stream finishes, re-apply highlights to the final text.
+                if !isTranslating {
                     updateTranslatedGlossaryAndHighlights()
                 }
             }

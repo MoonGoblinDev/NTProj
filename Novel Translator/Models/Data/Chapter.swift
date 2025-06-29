@@ -1,6 +1,6 @@
 import Foundation
 
-struct Chapter: Codable, Identifiable {
+struct Chapter: Codable, Identifiable, Equatable {
     var id: UUID = UUID()
     var title: String
     var chapterNumber: Int

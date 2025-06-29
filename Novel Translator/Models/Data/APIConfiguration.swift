@@ -2,7 +2,7 @@
 import Foundation
 import SwiftUI
 
-struct APIConfiguration: Codable, Identifiable {
+struct APIConfiguration: Codable, Identifiable, Equatable {
     var id: UUID = UUID()
     var provider: APIProvider
     var apiKeyIdentifier: String // For cloud services
