@@ -7,7 +7,6 @@
 
 import SwiftUI
 
-
 @MainActor
 class AppContext: ObservableObject {
     
@@ -29,6 +28,7 @@ class AppContext: ObservableObject {
     @Published var isGlossaryDetailSheetPresented: Bool = false
     @Published var searchResultToHighlight: SearchResultItem?
     
-    // State for the new chat sidebar
-    @Published var isChatSidebarVisible: Bool = false
+    // State for the inspector sidebar
+    @Published var isInspectorVisible: Bool = false
+    @Published var selectedInspectorTab: InspectorTab = .chapter // Default to chapter tab
 }

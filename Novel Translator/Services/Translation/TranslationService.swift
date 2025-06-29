@@ -28,6 +28,30 @@ enum TranslationError: LocalizedError {
 @MainActor
 class TranslationService {
     private let glossaryMatcher = GlossaryMatcher()
+    
+    /// Saves the current translated content of a chapter as a new, non-current version.
+    /// This is used before overwriting a translation.
+    func archiveCurrentTranslation(project: TranslationProject, chapterID: UUID) {
+        guard let chapterIndex = project.chapters.firstIndex(where: { $0.id == chapterID }),
+              let translatedContent = project.chapters[chapterIndex].translatedContent,
+              !translatedContent.isEmpty else {
+            return
+        }
+        
+        // Use a default name for the archived version
+        let archiveName = "Pre-translation Snapshot - \(Date().formatted(date: .abbreviated, time: .shortened))"
+        
+        let newVersion = TranslationVersion(
+            versionNumber: (project.chapters[chapterIndex].translationVersions.map(\.versionNumber).max() ?? 0) + 1,
+            content: translatedContent,
+            llmModel: "Archived",
+            isCurrentVersion: false, // This is an archive, not the active version
+            name: archiveName
+        )
+        project.chapters[chapterIndex].translationVersions.append(newVersion)
+        project.lastModifiedDate = Date()
+        // Note: We don't save the project here, the calling function will handle that.
+    }
 
     /// Updates the in-memory models after a successful streaming translation.
     func updateModelsAfterStreaming(

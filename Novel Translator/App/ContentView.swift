@@ -17,22 +17,26 @@ struct ContentView: View {
                     TranslationWorkspaceView(project: project)
                         .frame(minWidth: 600)
                 }
-                .inspector(isPresented: $appContext.isChatSidebarVisible) {
-                    ChatView(project: project, projectManager: projectManager, workspaceViewModel: workspaceViewModel)
-                        .inspectorColumnWidth(min: 300, ideal: 400, max: 500)
-                        .toolbar{
-                            Button {
-                                                    withAnimation(.spring()) {
-                                                        appContext.isChatSidebarVisible.toggle()
-                                                    }
-                                                } label: {
-                                                    Label("Toggle Chat", systemImage: "bubble.right")
-                                                }
-                                                .symbolVariant(appContext.isChatSidebarVisible ? .fill : .none)
-                                                .keyboardShortcut("b", modifiers: [.command, .shift])
-                                                .help("Toggle Chat Panel (⌘⇧B)")
+                .inspector(isPresented: $appContext.isInspectorVisible) {
+                    // Use the new InspectorView which contains the tabs
+                    InspectorView(
+                        project: project,
+                        projectManager: projectManager,
+                        workspaceViewModel: workspaceViewModel
+                    )
+                    .inspectorColumnWidth(min: 300, ideal: 400, max: 500)
+                    .toolbar {
+                        Button {
+                            withAnimation(.spring()) {
+                                appContext.isInspectorVisible.toggle()
+                            }
+                        } label: {
+                            Label("Toggle Inspector", systemImage: "sidebar.right")
                         }
-
+                        .symbolVariant(appContext.isInspectorVisible ? .fill : .none)
+                        .keyboardShortcut("b", modifiers: [.command, .shift])
+                        .help("Toggle Inspector Panel (⌘⇧B)")
+                    }
                 }
             } else {
                 WelcomeView()

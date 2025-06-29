@@ -28,6 +28,7 @@ struct EditorAreaView: View {
     @State private var isConfigPopoverShown = false
     @State private var isGlossaryAssistantPresented = false // Changed name
     @State private var isHoveringOnTranslateButton = false
+    @State private var isOverwriteWarningPresented = false // For overwrite alert
     
     // New state for the popover-like view
     struct GlossaryInfo: Identifiable {
@@ -128,6 +129,27 @@ struct EditorAreaView: View {
                     projectManager: projectManager,
                     currentChapterID: activeChapter?.id
                 )
+            }
+            .alert("Existing Translation Found", isPresented: $isOverwriteWarningPresented, presenting: chapter) { ch in
+                Button("Cancel", role: .cancel) { }
+                Button("Overwrite") {
+                    translationViewModel.streamTranslateChapter(
+                        project: project,
+                        chapter: ch,
+                        settings: projectManager.settings,
+                        workspace: workspaceViewModel
+                    )
+                }
+                Button("Save Version & Translate") {
+                    translationViewModel.archiveAndStreamTranslateChapter(
+                        project: project,
+                        chapter: ch,
+                        settings: projectManager.settings,
+                        workspace: workspaceViewModel
+                    )
+                }
+            } message: { _ in
+                Text("This chapter already has a translation. How would you like to proceed?")
             }
         } else {
             ContentUnavailableView("No Chapter Selected", systemImage: "text.book.closed", description: Text("Select a chapter from the list in the sidebar."))
@@ -237,14 +259,18 @@ struct EditorAreaView: View {
                 // If it's translating, the action is to cancel.
                 translationViewModel.cancelTranslation()
             } else {
-                // Otherwise, start the translation.
-                // The view model function is no longer async.
-                translationViewModel.streamTranslateChapter(
-                    project: project,
-                    chapter: chapter,
-                    settings: projectManager.settings,
-                    workspace: workspaceViewModel
-                )
+                // Check if there is content to be overwritten
+                if let content = chapter.translatedContent, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    isOverwriteWarningPresented = true
+                } else {
+                    // Otherwise, start the translation directly.
+                    translationViewModel.streamTranslateChapter(
+                        project: project,
+                        chapter: chapter,
+                        settings: projectManager.settings,
+                        workspace: workspaceViewModel
+                    )
+                }
             }
         }) {
             if translationViewModel.isTranslating {

@@ -20,6 +20,20 @@ class TranslationViewModel {
         print("Translation cancellation requested.")
     }
     
+    /// Archives the current translation and then starts a new streaming translation.
+    func archiveAndStreamTranslateChapter(project: TranslationProject, chapter: Chapter, settings: AppSettings, workspace: WorkspaceViewModel) {
+        // 1. Archive the current state
+        translationService.archiveCurrentTranslation(project: project, chapterID: chapter.id)
+        
+        // 2. Start the new translation
+        streamTranslateChapter(
+            project: project,
+            chapter: chapter,
+            settings: settings,
+            workspace: workspace
+        )
+    }
+    
     // No longer async itself, it just kicks off the background work.
     func streamTranslateChapter(project: TranslationProject, chapter: Chapter, settings: AppSettings, workspace: WorkspaceViewModel) {
         // Cancel any existing task before starting a new one.
