@@ -18,25 +18,18 @@ struct ChapterInspectorView: View {
         workspaceViewModel.activeChapter
     }
 
-    private var currentVersion: TranslationVersion? {
-        activeChapter?.translationVersions.first(where: { $0.isCurrentVersion })
-    }
-
     var body: some View {
-        // Use if-let with chapterIndex for safe binding
         if let chapter = activeChapter, let chapterIndex = project.chapters.firstIndex(where: { $0.id == chapter.id }) {
             Form {
                 Section("Chapter Details") {
                     LabeledContent("Title", value: chapter.title)
 
-                    // MODIFICATION: Replaced LabeledContent with an editable Picker
                     Picker("Status", selection: $project.chapters[chapterIndex].translationStatus) {
                         ForEach(Chapter.TranslationStatus.allCases, id: \.self) { status in
                             Text(status.rawValue).tag(status)
                         }
                     }
                     .onChange(of: project.chapters[chapterIndex].translationStatus) {
-                        // Save changes whenever the status is modified
                         project.lastModifiedDate = Date()
                         projectManager.saveProject()
                     }
@@ -46,18 +39,21 @@ struct ChapterInspectorView: View {
                     LabeledContent("Word Count", value: "\(chapter.wordCount)")
                 }
                 
-                Section("Current Translation Info") {
-                    if let version = currentVersion {
-                        LabeledContent("Model", value: version.llmModel)
+                Section("Last Translation Info") {
+                    if let model = chapter.lastTranslationModel, !model.isEmpty {
+                        LabeledContent("Model", value: model)
                         if let date = chapter.lastTranslatedDate {
                             LabeledContent("Date", value: date.formatted(date: .abbreviated, time: .shortened))
                         }
-                        if let time = version.translationTime {
+                        if let time = chapter.lastTranslationTime {
                             LabeledContent("Time", value: String(format: "%.2f s", time))
                         }
-                        if let tokens = version.tokensUsed {
+                        if let tokens = chapter.lastTranslationTokensUsed {
                             LabeledContent("Tokens", value: "\(tokens)")
                         }
+                    } else if chapter.translatedContent?.isEmpty == false {
+                        // Has content, but no LLM metadata (e.g., from manual edit)
+                        LabeledContent("Source", value: "Manual")
                     } else {
                         Text("Not translated yet.")
                             .foregroundStyle(.secondary)
@@ -71,7 +67,6 @@ struct ChapterInspectorView: View {
                             .frame(maxWidth: .infinity, minHeight: 150, alignment: .center)
                     } else {
                         VStack {
-                            // Add a button to stop previewing if a preview is active
                             if previewingVersionID != nil {
                                 HStack {
                                     Button(action: stopPreviewing) {
@@ -120,7 +115,6 @@ struct ChapterInspectorView: View {
                 }
             }
             .onChange(of: workspaceViewModel.activeChapterID) { _, _ in
-                // When chapter changes, stop any active preview to avoid confusion
                 stopPreviewing()
             }
         } else {
@@ -144,7 +138,7 @@ struct ChapterInspectorView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(version.name ?? "Version \(version.versionNumber)")
                         
-                        Text("Model: \(version.llmModel)")
+                        Text("Source: \(version.llmModel)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -162,7 +156,6 @@ struct ChapterInspectorView: View {
             }
             .buttonStyle(.plain)
             .help("Revert to this version")
-            .disabled(version.isCurrentVersion)
             
             Button(action: {
                 deleteVersion(version, in: chapter)
@@ -172,7 +165,6 @@ struct ChapterInspectorView: View {
             }
             .buttonStyle(.plain)
             .help("Delete this version")
-            .disabled(version.isCurrentVersion)
         }
         .padding(.vertical, 4)
         .background(previewingVersionID == version.id ? Color.accentColor.opacity(0.15) : Color.clear, in: RoundedRectangle(cornerRadius: 4))
@@ -182,19 +174,8 @@ struct ChapterInspectorView: View {
     // MARK: - Core Action Methods
 
     private func saveCurrentAsVersion(chapter: Chapter, name: String) {
-        guard let chapterIndex = project.chapters.firstIndex(where: { $0.id == chapter.id }),
-              let translatedContent = project.chapters[chapterIndex].translatedContent,
-              !translatedContent.isEmpty else { return }
-
-        let newVersion = TranslationVersion(
-            versionNumber: (project.chapters[chapterIndex].translationVersions.map(\.versionNumber).max() ?? 0) + 1,
-            content: translatedContent,
-            llmModel: "Manual Snapshot",
-            isCurrentVersion: false,
-            name: name
-        )
-        project.chapters[chapterIndex].translationVersions.append(newVersion)
-        project.lastModifiedDate = Date()
+        let service = TranslationService()
+        service.createVersionSnapshot(project: project, chapterID: chapter.id, name: name)
         projectManager.saveProject()
     }
 
@@ -203,16 +184,14 @@ struct ChapterInspectorView: View {
         
         guard let chapterIndex = project.chapters.firstIndex(where: { $0.id == chapter.id }) else { return }
         
-        if let oldCurrentIndex = project.chapters[chapterIndex].translationVersions.firstIndex(where: { $0.isCurrentVersion }) {
-            project.chapters[chapterIndex].translationVersions[oldCurrentIndex].isCurrentVersion = false
-        }
-        
-        if let newCurrentIndex = project.chapters[chapterIndex].translationVersions.firstIndex(where: { $0.id == versionToRevert.id }) {
-            project.chapters[chapterIndex].translationVersions[newCurrentIndex].isCurrentVersion = true
-        }
-        
+        // Update the chapter's main content and metadata from the version being reverted to.
         project.chapters[chapterIndex].translatedContent = versionToRevert.content
+        project.chapters[chapterIndex].lastTranslatedDate = versionToRevert.createdDate
+        project.chapters[chapterIndex].lastTranslationModel = versionToRevert.llmModel
+        project.chapters[chapterIndex].lastTranslationTime = versionToRevert.translationTime
+        project.chapters[chapterIndex].lastTranslationTokensUsed = versionToRevert.tokensUsed
         
+        // Update the live editor state
         if let editorState = workspaceViewModel.editorStates[chapter.id] {
             editorState.updateTranslation(newText: versionToRevert.content)
         }
@@ -226,8 +205,8 @@ struct ChapterInspectorView: View {
             stopPreviewing()
         }
         
-        guard !versionToDelete.isCurrentVersion,
-              let chapterIndex = project.chapters.firstIndex(where: { $0.id == chapter.id }) else { return }
+        // Any version can be deleted now.
+        guard let chapterIndex = project.chapters.firstIndex(where: { $0.id == chapter.id }) else { return }
         
         project.chapters[chapterIndex].translationVersions.removeAll { $0.id == versionToDelete.id }
         project.lastModifiedDate = Date()

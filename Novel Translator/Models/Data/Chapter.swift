@@ -13,6 +13,11 @@ struct Chapter: Codable, Identifiable, Equatable {
     var estimatedTokens: Int?
     var originalFilename: String? // New property
     
+    // New properties to store last translation metadata
+    var lastTranslationModel: String?
+    var lastTranslationTokensUsed: Int?
+    var lastTranslationTime: TimeInterval?
+    
     var translationVersions: [TranslationVersion] = []
     
     var sourceLineCount: Int {
@@ -43,7 +48,8 @@ struct Chapter: Codable, Identifiable, Equatable {
     
     // MARK: - Codable Conformance
     enum CodingKeys: String, CodingKey {
-        case id, title, chapterNumber, rawContent, translatedContent, wordCount, translationStatus, createdDate, lastTranslatedDate, estimatedTokens, originalFilename, translationVersions
+        case id, title, chapterNumber, rawContent, translatedContent, wordCount, translationStatus, createdDate, lastTranslatedDate, estimatedTokens, originalFilename, translationVersions,
+             lastTranslationModel, lastTranslationTokensUsed, lastTranslationTime
     }
 
     init(from decoder: Decoder) throws {
@@ -60,6 +66,11 @@ struct Chapter: Codable, Identifiable, Equatable {
         estimatedTokens = try container.decodeIfPresent(Int.self, forKey: .estimatedTokens)
         originalFilename = try container.decodeIfPresent(String.self, forKey: .originalFilename)
         translationVersions = try container.decodeIfPresent([TranslationVersion].self, forKey: .translationVersions) ?? []
+        
+        // Decode new properties, handling older files gracefully
+        lastTranslationModel = try container.decodeIfPresent(String.self, forKey: .lastTranslationModel)
+        lastTranslationTokensUsed = try container.decodeIfPresent(Int.self, forKey: .lastTranslationTokensUsed)
+        lastTranslationTime = try container.decodeIfPresent(TimeInterval.self, forKey: .lastTranslationTime)
     }
     
     func encode(to encoder: Encoder) throws {
@@ -76,5 +87,10 @@ struct Chapter: Codable, Identifiable, Equatable {
         try container.encodeIfPresent(estimatedTokens, forKey: .estimatedTokens)
         try container.encodeIfPresent(originalFilename, forKey: .originalFilename)
         try container.encode(translationVersions, forKey: .translationVersions)
+        
+        // Encode new properties
+        try container.encodeIfPresent(lastTranslationModel, forKey: .lastTranslationModel)
+        try container.encodeIfPresent(lastTranslationTokensUsed, forKey: .lastTranslationTokensUsed)
+        try container.encodeIfPresent(lastTranslationTime, forKey: .lastTranslationTime)
     }
 }

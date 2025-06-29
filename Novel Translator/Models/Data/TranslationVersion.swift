@@ -10,9 +10,8 @@ struct TranslationVersion: Codable, Identifiable, Equatable {
     var promptUsed: String?
     var tokensUsed: Int?
     var translationTime: TimeInterval?
-    var isCurrentVersion: Bool
     
-    init(versionNumber: Int, content: String, llmModel: String, promptUsed: String? = nil, tokensUsed: Int? = nil, translationTime: TimeInterval? = nil, isCurrentVersion: Bool = true, name: String? = nil) {
+    init(versionNumber: Int, content: String, llmModel: String, promptUsed: String? = nil, tokensUsed: Int? = nil, translationTime: TimeInterval? = nil, name: String? = nil) {
         self.id = UUID()
         self.versionNumber = versionNumber
         self.content = content
@@ -20,13 +19,12 @@ struct TranslationVersion: Codable, Identifiable, Equatable {
         self.promptUsed = promptUsed
         self.tokensUsed = tokensUsed
         self.translationTime = translationTime
-        self.isCurrentVersion = isCurrentVersion
         self.name = name
     }
     
     // Custom coding keys to handle the new optional field gracefully
     enum CodingKeys: String, CodingKey {
-        case id, name, versionNumber, content, createdDate, llmModel, promptUsed, tokensUsed, translationTime, isCurrentVersion
+        case id, name, versionNumber, content, createdDate, llmModel, promptUsed, tokensUsed, translationTime
     }
     
     init(from decoder: Decoder) throws {
@@ -40,8 +38,6 @@ struct TranslationVersion: Codable, Identifiable, Equatable {
         promptUsed = try container.decodeIfPresent(String.self, forKey: .promptUsed)
         tokensUsed = try container.decodeIfPresent(Int.self, forKey: .tokensUsed)
         translationTime = try container.decodeIfPresent(TimeInterval.self, forKey: .translationTime)
-        // Handle older files that might not have this key. Default to false, it will be corrected on next load by ProjectManager.
-        isCurrentVersion = try container.decodeIfPresent(Bool.self, forKey: .isCurrentVersion) ?? false
     }
     
     func encode(to encoder: Encoder) throws {
@@ -55,6 +51,5 @@ struct TranslationVersion: Codable, Identifiable, Equatable {
         try container.encodeIfPresent(promptUsed, forKey: .promptUsed)
         try container.encodeIfPresent(tokensUsed, forKey: .tokensUsed)
         try container.encodeIfPresent(translationTime, forKey: .translationTime)
-        try container.encode(isCurrentVersion, forKey: .isCurrentVersion)
     }
 }

@@ -195,32 +195,22 @@ class ProjectManager: ObservableObject {
     
     private func loadProject(from url: URL) {
         do {
-            let data = try Data(contentsOf: url)
-            var project = try jsonDecoder.decode(TranslationProject.self, from: data)
-            
-            // --- MIGRATION LOGIC for isCurrentVersion flag ---
-            var projectWasModified = false
-            for i in 0..<project.chapters.count {
-                // If a chapter has versions but none are marked as current, fix it.
-                if !project.chapters[i].translationVersions.isEmpty && !project.chapters[i].translationVersions.contains(where: { $0.isCurrentVersion }) {
-                    // Find the version with the highest number and mark it as current.
-                    if let latestVersionIndex = project.chapters[i].translationVersions.indices.max(by: { project.chapters[i].translationVersions[$0].versionNumber < project.chapters[i].translationVersions[$1].versionNumber }) {
-                        project.chapters[i].translationVersions[latestVersionIndex].isCurrentVersion = true
-                        print("Migrating chapter '\(project.chapters[i].title)': Set latest version as current.")
-                        projectWasModified = true
-                    }
-                }
+            guard url.startAccessingSecurityScopedResource() else {
+                print("Failed to gain access to security-scoped resource.")
+                // Optionally present an error to the user here.
+                return
             }
-            // --- END MIGRATION ---
+            
+            let data = try Data(contentsOf: url)
+            let project = try jsonDecoder.decode(TranslationProject.self, from: data)
+            
+            // Migration logic for isCurrentVersion is no longer needed.
             
             self.currentProject = project
             self.currentProjectURL = url // This sets the new URL and `didSet` releases the old one.
-            self.isProjectDirty = projectWasModified // Mark project as dirty if we migrated it
+            self.isProjectDirty = false
             updateProjectMetadata(for: project, at: url)
             
-            if projectWasModified {
-                print("Project data was migrated. It's recommended to save the project.")
-            }
         } catch {
             // TODO: Present an error alert to the user
             print("Failed to open or decode project: \(error)")

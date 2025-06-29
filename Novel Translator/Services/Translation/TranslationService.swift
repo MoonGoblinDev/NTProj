@@ -29,28 +29,28 @@ enum TranslationError: LocalizedError {
 class TranslationService {
     private let glossaryMatcher = GlossaryMatcher()
     
-    /// Saves the current translated content of a chapter as a new, non-current version.
-    /// This is used before overwriting a translation.
-    func archiveCurrentTranslation(project: TranslationProject, chapterID: UUID) {
+    /// Creates a snapshot of the chapter's current translated state.
+    func createVersionSnapshot(project: TranslationProject, chapterID: UUID, name: String) {
         guard let chapterIndex = project.chapters.firstIndex(where: { $0.id == chapterID }),
               let translatedContent = project.chapters[chapterIndex].translatedContent,
               !translatedContent.isEmpty else {
             return
         }
         
-        // Use a default name for the archived version
-        let archiveName = "Pre-translation Snapshot - \(Date().formatted(date: .abbreviated, time: .shortened))"
+        let chapter = project.chapters[chapterIndex]
         
         let newVersion = TranslationVersion(
-            versionNumber: (project.chapters[chapterIndex].translationVersions.map(\.versionNumber).max() ?? 0) + 1,
+            versionNumber: (chapter.translationVersions.map(\.versionNumber).max() ?? 0) + 1,
             content: translatedContent,
-            llmModel: "Archived",
-            isCurrentVersion: false, // This is an archive, not the active version
-            name: archiveName
+            llmModel: chapter.lastTranslationModel ?? "Manual Edit", // Use last model or "Manual"
+            tokensUsed: chapter.lastTranslationTokensUsed,
+            translationTime: chapter.lastTranslationTime,
+            name: name.isEmpty ? nil : name // Use provided name
         )
+        
         project.chapters[chapterIndex].translationVersions.append(newVersion)
         project.lastModifiedDate = Date()
-        // Note: We don't save the project here, the calling function will handle that.
+        // The calling function will handle saving the project file.
     }
 
     /// Updates the in-memory models after a successful streaming translation.
@@ -69,33 +69,20 @@ class TranslationService {
             return
         }
         
-        // 1. Deactivate previous "current" version in the chapter
-        for i in 0..<project.chapters[chapterIndex].translationVersions.count {
-            project.chapters[chapterIndex].translationVersions[i].isCurrentVersion = false
-        }
-        
-        // 2. Create new version
-        let newVersion = TranslationVersion(
-            versionNumber: (project.chapters[chapterIndex].translationVersions.map(\.versionNumber).max() ?? 0) + 1,
-            content: fullText,
-            llmModel: modelUsed,
-            promptUsed: prompt,
-            tokensUsed: (inputTokens ?? 0) + (outputTokens ?? 0),
-            translationTime: translationTime,
-            isCurrentVersion: true
-        )
-        project.chapters[chapterIndex].translationVersions.append(newVersion)
-        
-        // 3. Update chapter with the final text
+        // 1. Update chapter with the final text and the new metadata properties
         project.chapters[chapterIndex].translatedContent = fullText
         project.chapters[chapterIndex].lastTranslatedDate = Date()
         project.chapters[chapterIndex].translationStatus = .needsReview
+        project.chapters[chapterIndex].lastTranslationModel = modelUsed
+        project.chapters[chapterIndex].lastTranslationTime = translationTime
+        project.chapters[chapterIndex].lastTranslationTokensUsed = (inputTokens ?? 0) + (outputTokens ?? 0)
+        
         project.lastModifiedDate = Date()
         
-        // 4. Update stats
+        // 2. Update stats
         updateStatsAfterTranslation(project: project, chapter: project.chapters[chapterIndex], inputTokens: inputTokens, outputTokens: outputTokens, translationTime: translationTime)
         
-        // 5. Update glossary usage
+        // 3. Update glossary usage
         let matches = glossaryMatcher.detectTerms(in: project.chapters[chapterIndex].rawContent, from: project.glossaryEntries)
         for match in matches {
             if let entryIndex = project.glossaryEntries.firstIndex(where: { $0.id == match.entry.id }) {
@@ -120,14 +107,6 @@ class TranslationService {
         if (chapter.translatedContent ?? "") != translatedContent {
             chapter.translatedContent = translatedContent
             
-            // Also update the content of the "current" translation version
-            if let currentVersionIndex = chapter.translationVersions.firstIndex(where: { $0.isCurrentVersion }) {
-                chapter.translationVersions[currentVersionIndex].content = translatedContent
-            } else if !translatedContent.isEmpty {
-                // If there's no version history yet, create the first one.
-                let newVersion = TranslationVersion(versionNumber: 1, content: translatedContent, llmModel: "Manual Edit")
-                chapter.translationVersions.append(newVersion)
-            }
             hasChanges = true
         }
 
@@ -152,7 +131,7 @@ class TranslationService {
         let previouslyCompleted = Double(project.stats.completedChapters)
         
         // Increment completion counts only if this is the first translation for this chapter.
-        if chapter.translationVersions.count == 1 {
+        if chapter.lastTranslatedDate == nil { // A better check than versions.count
             project.stats.completedChapters += 1
             project.stats.translatedWords += chapter.wordCount
         }

@@ -20,21 +20,10 @@ class TranslationViewModel {
         print("Translation cancellation requested.")
     }
     
-    /// Archives the current translation and then starts a new streaming translation.
-    func archiveAndStreamTranslateChapter(project: TranslationProject, chapter: Chapter, settings: AppSettings, workspace: WorkspaceViewModel) {
-        // 1. Archive the current state
-        translationService.archiveCurrentTranslation(project: project, chapterID: chapter.id)
-        
-        // 2. Start the new translation
-        streamTranslateChapter(
-            project: project,
-            chapter: chapter,
-            settings: settings,
-            workspace: workspace
-        )
-    }
+    // NOTE: `archiveAndStreamTranslateChapter` was removed.
+    // This logic is now handled directly within EditorAreaView to manage the alert flow.
     
-    // No longer async itself, it just kicks off the background work.
+    // This is now the one and only method to start a translation.
     func streamTranslateChapter(project: TranslationProject, chapter: Chapter, settings: AppSettings, workspace: WorkspaceViewModel) {
         // Cancel any existing task before starting a new one.
         translationTask?.cancel()
@@ -134,8 +123,10 @@ class TranslationViewModel {
                 let finalLength = finalFullText.utf16.count
                 workspace.activeEditorState?.translatedSelection = NSRange(location: finalLength, length: 0)
 
-                // Once the stream is finished, save the final result to the in-memory model.
+                // *** THIS IS THE FIX: Calculate translationTime before using it. ***
                 let translationTime = Date().timeIntervalSince(startTime)
+                
+                // This no longer creates a version. It just updates the chapter's content and metadata.
                 translationService.updateModelsAfterStreaming(
                     project: project,
                     chapterID: chapter.id,
